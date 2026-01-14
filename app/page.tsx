@@ -7,7 +7,7 @@ export default async function HomePage() {
   const { data: protests, error } = await supabase
     .from("protests")
     .select("id,title,description,city,state,event_time,created_at,organizer_username")
-    .order("event_time", { ascending: true, nullsLast: true })
+    .order("event_time", { ascending: true })
     .order("created_at", { ascending: false });
 
   return (
