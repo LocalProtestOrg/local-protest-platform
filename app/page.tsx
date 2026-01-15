@@ -13,12 +13,20 @@ type ProtestRow = {
   event_time: string | null;
   created_at: string | null;
   organizer_username: string | null;
+  image_path: string | null;
 };
+
+const GLOBAL_ALT =
+  "Peaceful protest gathering around the nation unite for a common cause.";
+
+function publicImageUrl(path: string) {
+  return supabase.storage.from("protest-images").getPublicUrl(path).data.publicUrl;
+}
 
 export default async function HomePage() {
   const { data, error } = await supabase
     .from("protests")
-    .select("id,title,description,city,state,event_time,created_at,organizer_username")
+    .select("id,title,description,city,state,event_time,created_at,organizer_username,image_path")
     .order("created_at", { ascending: false });
 
   const protests = (data ?? []) as ProtestRow[];
@@ -26,11 +34,10 @@ export default async function HomePage() {
   return (
     <>
       <PageHeader
-  title="Local Assembly"
-  subtitle="A neutral, community-submitted directory of public demonstrations and civic gatherings."
-  imageUrl="/images/homepage-hero.jpg"
-/>
-
+        title="Local Assembly"
+        subtitle="A neutral, community-submitted directory of public demonstrations and civic gatherings."
+        imageUrl="/images/home-hero.jpg"
+      />
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
@@ -55,34 +62,62 @@ export default async function HomePage() {
           {protests.length === 0 ? (
             <p>No listings yet.</p>
           ) : (
-            protests.map((p) => (
-              <article
-                key={p.id}
-                style={{
-                  border: "1px solid #e5e5e5",
-                  borderRadius: 12,
-                  padding: 16,
-                  background: "white",
-                }}
-              >
-                <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>{p.title}</h2>
+            protests.map((p) => {
+              const href = "/protest/" + p.id;
+              const when = p.event_time ? new Date(p.event_time).toLocaleString() : "";
+              const location = (p.city ?? "—") + ", " + (p.state ?? "—");
+              const thumbUrl = p.image_path ? publicImageUrl(p.image_path) : null;
 
-                {p.description ? <p style={{ marginTop: 8 }}>{p.description}</p> : null}
+              return (
+                <article
+                  key={p.id}
+                  style={{
+                    border: "1px solid #e5e5e5",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    background: "white",
+                  }}
+                >
+                  {/* Thumbnail (optional) */}
+                  {thumbUrl ? (
+                    <img
+                      src={thumbUrl}
+                      alt={GLOBAL_ALT}
+                      style={{
+                        width: "100%",
+                        height: 220,
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                      loading="lazy"
+                    />
+                  ) : null}
 
-                <p style={{ marginTop: 8, color: "#555" }}>
-                  {(p.city ?? "—")}, {(p.state ?? "—")}
-                  {p.event_time ? ` • ${new Date(p.event_time).toLocaleString()}` : ""}
-                </p>
+                  <div style={{ padding: 16 }}>
+                    <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>{p.title}</h2>
 
-                <p style={{ marginTop: 6, color: "#555" }}>
-                  Organizer: <strong>@{p.organizer_username ?? "unknown"}</strong>
-                </p>
+                    {p.description ? (
+                      <p style={{ marginTop: 8 }}>
+                        {p.description.length > 160 ? p.description.slice(0, 160) + "…" : p.description}
+                      </p>
+                    ) : null}
 
-                <Link href={`/protest/${p.id}`} style={{ display: "inline-block", marginTop: 10 }}>
-                  View details →
-                </Link>
-              </article>
-            ))
+                    <p style={{ marginTop: 8, color: "#555" }}>
+                      {location}
+                      {when ? " • " + when : ""}
+                    </p>
+
+                    <p style={{ marginTop: 6, color: "#555" }}>
+                      Organizer: <strong>@{p.organizer_username ?? "unknown"}</strong>
+                    </p>
+
+                    <Link href={href} style={{ display: "inline-block", marginTop: 10 }}>
+                      View details →
+                    </Link>
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
 
