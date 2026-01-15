@@ -26,10 +26,11 @@ export default async function HomePage() {
   return (
     <>
       <PageHeader
-        title="Local Assembly"
-        subtitle="A neutral, community-submitted directory of public demonstrations and civic gatherings."
-        imageUrl="https://images.unsplash.com/photo-1509099836639-18ba1795216d?auto=format&fit=crop&w=2000&q=80"
-      />
+  title="Local Assembly"
+  subtitle="A neutral, community-submitted directory of public demonstrations and civic gatherings."
+  imageUrl="/images/homepage-hero.jpg"
+/>
+
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>

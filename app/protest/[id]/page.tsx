@@ -145,10 +145,10 @@ export default function ProtestDetailPage() {
   return (
     <>
       <PageHeader
-        title={protest.title}
-        subtitle={timeLine ? `${locationLine} • ${timeLine}` : locationLine}
-        imageUrl="/images/peaceful-protest.jpg"
-      />
+  title={protest.title}
+  subtitle={protest.city && protest.state ? `${protest.city}, ${protest.state}` : undefined}
+  imageUrl="/images/peaceful-protest.jpg"
+/>
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>

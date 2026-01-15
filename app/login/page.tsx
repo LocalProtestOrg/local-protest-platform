@@ -1,102 +1,99 @@
-"use client";
-
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
+import { supabase } from "@/lib/supabase";
 
-export default function LoginPage() {
-  const router = useRouter();
+export const revalidate = 0;
 
-  const [mode, setMode] = useState<"login" | "signup">("signup");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [username, setUsername] = useState("");
-  const [msg, setMsg] = useState("");
+type ProtestRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  city: string | null;
+  state: string | null;
+  event_time: string | null;
+  created_at: string | null;
+  organizer_username: string | null;
+};
 
-  async function signUp() {
-    setMsg("");
-    try {
-      if (!username.trim()) return setMsg("Please choose a username.");
+export default async function HomePage() {
+  const { data, error } = await supabase
+    .from("protests")
+    .select("id,title,description,city,state,event_time,created_at,organizer_username")
+    .order("created_at", { ascending: false });
 
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) return setMsg(error.message);
-
-      const userId = data.user?.id;
-      if (userId) {
-        const { error: profileErr } = await supabase
-          .from("profiles")
-          .insert({ id: userId, username: username.trim() });
-
-        if (profileErr) return setMsg(profileErr.message);
-      }
-
-      router.push("/create");
-    } catch (e: any) {
-      setMsg(e?.message || "Sign up failed.");
-    }
-  }
-
-  async function logIn() {
-    setMsg("");
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return setMsg(error.message);
-      router.push("/create");
-    } catch (e: any) {
-      setMsg(e?.message || "Login failed.");
-    }
-  }
+  const protests = (data ?? []) as ProtestRow[];
 
   return (
     <>
       <PageHeader
   title="Organizer Access"
   subtitle="Create and manage public listings responsibly."
-  imageUrl="https://images.unsplash.com/photo-1509099836639-18ba1795216d?auto=format&fit=crop&w=2000&q=80"
+  imageUrl="/images/homepage-hero.jpg"
 />
 
 
-      <main style={{ maxWidth: 520, margin: "0 auto", padding: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700 }}>
-          {mode === "signup" ? "Create account" : "Log in"}
-        </h1>
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Browse listings</h1>
+            <p style={{ marginTop: 8, color: "#444", maxWidth: 720 }}>
+              Listings are created by organizers. This platform does not endorse or oppose any event.
+            </p>
+          </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button onClick={() => setMode("signup")}>Sign up</button>
-          <button onClick={() => setMode("login")}>Log in</button>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <Link href="/create">Create</Link>
+            <Link href="/login">Login</Link>
+          </div>
         </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
-          {mode === "signup" && (
-            <input
-              placeholder="Username (public)"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          )}
+        {error ? (
+          <p style={{ marginTop: 16, color: "crimson" }}>Database error: {error.message}</p>
+        ) : null}
 
-          <input
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-
-          <input
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          {mode === "signup" ? (
-            <button onClick={signUp}>Sign up</button>
+        <div style={{ marginTop: 24, display: "grid", gap: 14 }}>
+          {protests.length === 0 ? (
+            <p>No listings yet.</p>
           ) : (
-            <button onClick={logIn}>Log in</button>
-          )}
+            protests.map((p) => {
+              const href = "/protest/" + p.id; // avoids template literals
+              const when = p.event_time ? new Date(p.event_time).toLocaleString() : "";
 
-          {msg && <p style={{ color: "#b00020" }}>{msg}</p>}
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    border: "1px solid #e5e5e5",
+                    borderRadius: 12,
+                    padding: 16,
+                    background: "white",
+                  }}
+                >
+                  <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>{p.title}</h2>
+
+                  {p.description ? <p style={{ marginTop: 8 }}>{p.description}</p> : null}
+
+                  <p style={{ marginTop: 8, color: "#555" }}>
+                    {(p.city ?? "—") + ", " + (p.state ?? "—")}
+                    {when ? " • " + when : ""}
+                  </p>
+
+                  <p style={{ marginTop: 6, color: "#555" }}>
+                    Organizer: <strong>@{p.organizer_username ?? "unknown"}</strong>
+                  </p>
+
+                  <Link href={href} style={{ display: "inline-block", marginTop: 10 }}>
+                    View details →
+                  </Link>
+                </div>
+              );
+            })
+          )}
         </div>
+
+        <footer style={{ marginTop: 32, color: "#666", fontSize: 13 }}>
+          Community note: Comments are public. The organizer moderates comments for each listing.
+        </footer>
       </main>
     </>
   );
