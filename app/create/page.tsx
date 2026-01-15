@@ -8,6 +8,7 @@ import PageHeader from "@/components/PageHeader";
 
 export default function CreatePage() {
   const router = useRouter();
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -42,51 +43,104 @@ export default function CreatePage() {
   }, [router]);
 
   async function createListing() {
-    setMsg("");
+  setMsg("");
 
-    if (!title.trim() || !description.trim()) {
-      setMsg("Title and description are required.");
-      return;
-    }
-
-    if (!userId) {
-      setMsg("You must be logged in.");
-      return;
-    }
-
-    // eventTime can be empty (allowed)
-    const event_time_value = eventTime ? new Date(eventTime).toISOString() : null;
-
-    const { data, error } = await supabase
-      .from("protests")
-      .insert({
-        user_id: userId,
-        organizer_username: username ?? "unknown",
-        title: title.trim(),
-        description: description.trim(),
-        city: city.trim() || null,
-        state: stateVal.trim() || null,
-        event_time: event_time_value,
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      setMsg(error.message);
-      return;
-    }
-
-    const id = (data as any)?.id;
-    if (id) router.push("/protest/" + id);
-    else router.push("/");
+  if (!title.trim() || !description.trim()) {
+    setMsg("Title and description are required.");
+    return;
   }
+
+  if (!userId) {
+    setMsg("You must be logged in.");
+    return;
+  }
+
+  // Simple client-side image checks (recommended)
+  if (imageFile) {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(imageFile.type)) {
+      setMsg("Image must be a JPG, PNG, or WEBP file.");
+      return;
+    }
+    const maxBytes = 5 * 1024 * 1024; // 5MB
+    if (imageFile.size > maxBytes) {
+      setMsg("Image is too large (max 5MB).");
+      return;
+    }
+  }
+
+  const event_time_value = eventTime ? new Date(eventTime).toISOString() : null;
+
+  // 1) Create the protest row first
+  const { data: created, error: createErr } = await supabase
+    .from("protests")
+    .insert({
+      user_id: userId,
+      organizer_username: username ?? "unknown",
+      title: title.trim(),
+      description: description.trim(),
+      city: city.trim() || null,
+      state: stateVal.trim() || null,
+      event_time: event_time_value,
+    })
+    .select("id")
+    .single();
+
+  if (createErr) {
+    setMsg(createErr.message);
+    return;
+  }
+
+  const protestId = (created as any)?.id as string;
+
+  // 2) Upload image (optional)
+  if (imageFile) {
+    const ext =
+      imageFile.type === "image/png"
+        ? "png"
+        : imageFile.type === "image/webp"
+        ? "webp"
+        : "jpg";
+
+    const filePath = `protests/${protestId}/cover.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("protest-images")
+      .upload(filePath, imageFile, {
+        upsert: true,
+        cacheControl: "3600",
+        contentType: imageFile.type,
+      });
+
+    if (uploadErr) {
+      setMsg("Listing created, but image upload failed: " + uploadErr.message);
+      router.push("/protest/" + protestId);
+      return;
+    }
+
+    // 3) Save image path on the protest row
+    const { error: updateErr } = await supabase
+      .from("protests")
+      .update({ image_path: filePath })
+      .eq("id", protestId);
+
+    if (updateErr) {
+      setMsg("Listing created, but saving image path failed: " + updateErr.message);
+      router.push("/protest/" + protestId);
+      return;
+    }
+  }
+
+  router.push("/protest/" + protestId);
+}
+
 
   return (
     <>
       <PageHeader
         title="Create a Listing"
         subtitle="Post a public event for your local community. You are responsible for moderating comments on your listing."
-        imageUrl="/images/header-image.jpg"
+        imageUrl="/images/home-hero.jpg"
       />
 
       <main style={{ maxWidth: 720, margin: "0 auto", padding: 24 }}>
@@ -135,6 +189,14 @@ export default function CreatePage() {
               onChange={(e) => setEventTime(e.target.value)}
             />
           </label>
+<label style={{ display: "grid", gap: 6 }}>
+  <span style={{ color: "#444", fontSize: 13 }}>Cover image (optional)</span>
+  <input
+    type="file"
+    accept="image/png,image/jpeg,image/webp"
+    onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+  />
+</label>
 
           <button onClick={createListing} style={{ marginTop: 6 }}>
             Publish listing

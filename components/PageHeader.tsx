@@ -16,13 +16,15 @@ export default function PageHeader({
   style={{
     width: "100%",
     height: 280,
-    backgroundImage: `url(${imageUrl})`,
+    backgroundColor: "#d9d9d9", // fallback if image fails
+    backgroundImage: `url("${imageUrl}")`,
     backgroundRepeat: "no-repeat",
     backgroundSize: "cover",
     backgroundPosition: "center center",
     position: "relative",
   }}
 >
+
 
       {/* Accessible alt text for screen readers */}
       <img
