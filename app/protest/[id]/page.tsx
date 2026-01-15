@@ -16,6 +16,7 @@ type Protest = {
   state: string | null;
   event_time: string | null;
   created_at: string;
+  image_path: string | null;
 };
 
 type CommentRow = {
@@ -26,6 +27,9 @@ type CommentRow = {
   status: "visible" | "hidden";
   created_at: string;
 };
+
+const GLOBAL_ALT =
+  "Peaceful protest gathering around the nation unite for a common cause.";
 
 export default function ProtestDetailPage() {
   const params = useParams<{ id: string }>();
@@ -55,11 +59,14 @@ export default function ProtestDetailPage() {
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setMsg("");
 
+      // Who is viewing?
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData.user?.id ?? null;
       setViewerUserId(uid);
 
+      // Load protest
       const { data: p, error: pErr } = await supabase
         .from("protests")
         .select("*")
@@ -68,37 +75,53 @@ export default function ProtestDetailPage() {
 
       if (pErr) {
         setMsg(pErr.message);
+        setProtest(null);
         setLoading(false);
         return;
       }
 
       const protestRow = p as Protest;
       setProtest(protestRow);
+
+      // Organizer check
       setIsOrganizer(!!uid && protestRow.user_id === uid);
 
-      const { data: c } = await supabase
+      // Load comments
+      const { data: c, error: cErr } = await supabase
         .from("comments")
         .select("*")
         .eq("protest_id", protestId)
         .order("created_at", { ascending: true });
 
-      setComments((c as CommentRow[]) ?? []);
+      if (cErr) {
+        setMsg(cErr.message);
+        setComments([]);
+      } else {
+        setComments((c as CommentRow[]) ?? []);
+      }
+
       setLoading(false);
     })();
   }, [protestId]);
 
   async function refreshComments() {
-    const { data: c } = await supabase
+    const { data: c, error } = await supabase
       .from("comments")
       .select("*")
       .eq("protest_id", protestId)
       .order("created_at", { ascending: true });
+
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
 
     setComments((c as CommentRow[]) ?? []);
   }
 
   async function postComment() {
     setMsg("");
+
     if (!authorName.trim() || !body.trim()) {
       setMsg("Name and comment are required.");
       return;
@@ -121,15 +144,23 @@ export default function ProtestDetailPage() {
 
   async function setCommentStatus(commentId: string, status: "visible" | "hidden") {
     setMsg("");
-    const { error } = await supabase.from("comments").update({ status }).eq("id", commentId);
+
+    const { error } = await supabase
+      .from("comments")
+      .update({ status })
+      .eq("id", commentId);
+
     if (error) return setMsg(error.message);
+
     await refreshComments();
   }
 
   async function deleteComment(commentId: string) {
     setMsg("");
+
     const { error } = await supabase.from("comments").delete().eq("id", commentId);
     if (error) return setMsg(error.message);
+
     await refreshComments();
   }
 
@@ -137,18 +168,25 @@ export default function ProtestDetailPage() {
   if (!protest) return <main style={{ padding: 24 }}>Not found. {msg}</main>;
 
   const locationLine =
-    (protest.city && protest.state) ? `${protest.city}, ${protest.state}` :
-    (protest.city ? protest.city : (protest.state ? protest.state : "Location not provided"));
+    protest.city && protest.state
+      ? `${protest.city}, ${protest.state}`
+      : protest.city
+      ? protest.city
+      : protest.state
+      ? protest.state
+      : "Location not provided";
 
   const timeLine = protest.event_time ? new Date(protest.event_time).toLocaleString() : null;
 
+  const headerSubtitle = timeLine ? `${locationLine} • ${timeLine}` : locationLine;
+
+  const uploadedImageUrl = protest.image_path
+    ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl
+    : null;
+
   return (
     <>
-      <PageHeader
-  title={protest.title}
-  subtitle={protest.city && protest.state ? `${protest.city}, ${protest.state}` : undefined}
-  imageUrl="/images/peaceful-protest.jpg"
-/>
+      <PageHeader title={protest.title} subtitle={headerSubtitle} imageUrl="/images/protest-hero.jpg" />
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
@@ -159,7 +197,22 @@ export default function ProtestDetailPage() {
           </div>
         </header>
 
-        <p style={{ marginTop: 14, color: "#444" }}>{protest.description}</p>
+        {/* Organizer-uploaded cover image (optional) */}
+        {uploadedImageUrl && (
+          <img
+            src={uploadedImageUrl}
+            alt={GLOBAL_ALT}
+            style={{
+              width: "100%",
+              borderRadius: 12,
+              marginTop: 16,
+              border: "1px solid #e5e5e5",
+              background: "white",
+            }}
+          />
+        )}
+
+        <p style={{ marginTop: 14 }}>{protest.description}</p>
 
         <p style={{ marginTop: 10, color: "#444" }}>
           Organizer: <strong>@{protest.organizer_username ?? "unknown"}</strong>
@@ -167,7 +220,7 @@ export default function ProtestDetailPage() {
 
         <hr style={{ margin: "24px 0" }} />
 
-        <div>
+        <section>
           <h2 style={{ fontSize: 20, fontWeight: 800 }}>Comments</h2>
           <p style={{ marginTop: 8, color: "#444" }}>
             Public comments are permitted. Organizers are responsible for moderating their post’s comments.
@@ -249,7 +302,7 @@ export default function ProtestDetailPage() {
               </div>
             </>
           )}
-        </div>
+        </section>
       </main>
     </>
   );
