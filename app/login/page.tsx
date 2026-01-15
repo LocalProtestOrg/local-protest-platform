@@ -1,99 +1,166 @@
+"use client";
+
+import { useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
-import { supabase } from "@/lib/supabase";
 
-export const revalidate = 0;
+export default function LoginPage() {
+  const router = useRouter();
 
-type ProtestRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  city: string | null;
-  state: string | null;
-  event_time: string | null;
-  created_at: string | null;
-  organizer_username: string | null;
-};
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
 
-export default async function HomePage() {
-  const { data, error } = await supabase
-    .from("protests")
-    .select("id,title,description,city,state,event_time,created_at,organizer_username")
-    .order("created_at", { ascending: false });
+  async function signUp() {
+    setMsg("");
+    setBusy(true);
 
-  const protests = (data ?? []) as ProtestRow[];
+    try {
+      if (!username.trim()) {
+        setMsg("Please choose a username.");
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setMsg(error.message);
+        return;
+      }
+
+      const userId = data.user?.id;
+      if (!userId) {
+        setMsg("Account created. Please check your email to verify, then log in.");
+        setMode("login");
+        return;
+      }
+
+      // Create profile row (RLS must allow insert for the user)
+      const { error: profileErr } = await supabase
+        .from("profiles")
+        .insert({ id: userId, username: username.trim() });
+
+      if (profileErr) {
+        setMsg(profileErr.message);
+        return;
+      }
+
+      router.push("/create");
+    } catch (e: any) {
+      setMsg(e?.message || "Sign up failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logIn() {
+    setMsg("");
+    setBusy(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setMsg(error.message);
+        return;
+      }
+
+      router.push("/create");
+    } catch (e: any) {
+      setMsg(e?.message || "Login failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
       <PageHeader
-  title="Organizer Access"
-  subtitle="Create and manage public listings responsibly."
-  imageUrl="/images/homepage-hero.jpg"
-/>
+        title="Organizer Access"
+        subtitle="Log in to create and manage public listings. Your username is the only public organizer identifier."
+        imageUrl="/images/login-hero.jpg"
+      />
 
+      <main style={{ maxWidth: 520, margin: "0 auto", padding: 24 }}>
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Link href="/">← Back</Link>
 
-      <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Browse listings</h1>
-            <p style={{ marginTop: 8, color: "#444", maxWidth: 720 }}>
-              Listings are created by organizers. This platform does not endorse or oppose any event.
-            </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setMode("signup")}
+              disabled={busy}
+              style={{ fontWeight: mode === "signup" ? 800 : 400 }}
+            >
+              Sign up
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("login")}
+              disabled={busy}
+              style={{ fontWeight: mode === "login" ? 800 : 400 }}
+            >
+              Log in
+            </button>
           </div>
+        </header>
 
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <Link href="/create">Create</Link>
-            <Link href="/login">Login</Link>
-          </div>
-        </div>
+        <h1 style={{ fontSize: 28, fontWeight: 800, marginTop: 18 }}>
+          {mode === "signup" ? "Create account" : "Log in"}
+        </h1>
 
-        {error ? (
-          <p style={{ marginTop: 16, color: "crimson" }}>Database error: {error.message}</p>
-        ) : null}
-
-        <div style={{ marginTop: 24, display: "grid", gap: 14 }}>
-          {protests.length === 0 ? (
-            <p>No listings yet.</p>
-          ) : (
-            protests.map((p) => {
-              const href = "/protest/" + p.id; // avoids template literals
-              const when = p.event_time ? new Date(p.event_time).toLocaleString() : "";
-
-              return (
-                <div
-                  key={p.id}
-                  style={{
-                    border: "1px solid #e5e5e5",
-                    borderRadius: 12,
-                    padding: 16,
-                    background: "white",
-                  }}
-                >
-                  <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>{p.title}</h2>
-
-                  {p.description ? <p style={{ marginTop: 8 }}>{p.description}</p> : null}
-
-                  <p style={{ marginTop: 8, color: "#555" }}>
-                    {(p.city ?? "—") + ", " + (p.state ?? "—")}
-                    {when ? " • " + when : ""}
-                  </p>
-
-                  <p style={{ marginTop: 6, color: "#555" }}>
-                    Organizer: <strong>@{p.organizer_username ?? "unknown"}</strong>
-                  </p>
-
-                  <Link href={href} style={{ display: "inline-block", marginTop: 10 }}>
-                    View details →
-                  </Link>
-                </div>
-              );
-            })
+        <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+          {mode === "signup" && (
+            <input
+              placeholder="Username (public)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+            />
           )}
-        </div>
 
-        <footer style={{ marginTop: 32, color: "#666", fontSize: 13 }}>
-          Community note: Comments are public. The organizer moderates comments for each listing.
-        </footer>
+          <input
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+          />
+
+          <input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          />
+
+          {mode === "signup" ? (
+            <button type="button" onClick={signUp} disabled={busy}>
+              {busy ? "Creating..." : "Sign up"}
+            </button>
+          ) : (
+            <button type="button" onClick={logIn} disabled={busy}>
+              {busy ? "Logging in..." : "Log in"}
+            </button>
+          )}
+
+          {msg && <p style={{ color: "#b00020", marginTop: 6 }}>{msg}</p>}
+
+          <p style={{ marginTop: 10, color: "#666", fontSize: 13, lineHeight: 1.4 }}>
+            Note: Comments are public. Organizers moderate comments on their own listings.
+          </p>
+        </div>
       </main>
     </>
   );
