@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import PageHeader from "@/components/PageHeader";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,42 +49,55 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 520, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700 }}>
-        {mode === "signup" ? "Create account" : "Log in"}
-      </h1>
+    <>
+      <PageHeader
+  title="Organizer Access"
+  subtitle="Create and manage public listings responsibly."
+  imageUrl="https://images.unsplash.com/photo-1509099836639-18ba1795216d?auto=format&fit=crop&w=2000&q=80"
+/>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <button onClick={() => setMode("signup")}>Sign up</button>
-        <button onClick={() => setMode("login")}>Log in</button>
-      </div>
 
-      <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
-        {mode === "signup" && (
+      <main style={{ maxWidth: 520, margin: "0 auto", padding: 24 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700 }}>
+          {mode === "signup" ? "Create account" : "Log in"}
+        </h1>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={() => setMode("signup")}>Sign up</button>
+          <button onClick={() => setMode("login")}>Log in</button>
+        </div>
+
+        <div style={{ display: "grid", gap: 10, marginTop: 18 }}>
+          {mode === "signup" && (
+            <input
+              placeholder="Username (public)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          )}
+
           <input
-            placeholder="Username (public)"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
-        )}
 
-        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
-        <input
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          {mode === "signup" ? (
+            <button onClick={signUp}>Sign up</button>
+          ) : (
+            <button onClick={logIn}>Log in</button>
+          )}
 
-        {mode === "signup" ? (
-          <button onClick={signUp}>Sign up</button>
-        ) : (
-          <button onClick={logIn}>Log in</button>
-        )}
-
-        {msg && <p style={{ color: "#b00020" }}>{msg}</p>}
-      </div>
-    </main>
+          {msg && <p style={{ color: "#b00020" }}>{msg}</p>}
+        </div>
+      </main>
+    </>
   );
 }
