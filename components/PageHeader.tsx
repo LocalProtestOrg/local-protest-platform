@@ -20,27 +20,27 @@ export default function PageHeader({
       }}
     >
       {/* Accessible alt text for screen readers */}
-      <img
-        src={imageUrl}
-        alt="Peaceful protest gathering around the nation unite for a common cause."
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          overflow: "hidden",
-          clip: "rect(0 0 0 0)",
-          whiteSpace: "nowrap",
-        }}
-      />
+      style={{
+  position: "absolute",
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  pointerEvents: "none",
+}}
+
 
       {/* Overlay */}
       <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "rgba(0,0,0,0.45)",
-        }}
-      />
+  style={{
+    position: "absolute",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    pointerEvents: "none",
+  }}
+/>
+
 
       {/* Content */}
       <div
