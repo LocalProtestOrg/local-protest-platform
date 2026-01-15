@@ -66,7 +66,10 @@ export default async function HomePage() {
               const href = "/protest/" + p.id;
               const when = p.event_time ? new Date(p.event_time).toLocaleString() : "";
               const location = (p.city ?? "—") + ", " + (p.state ?? "—");
-              const thumbUrl = p.image_path ? publicImageUrl(p.image_path) : null;
+              const thumbUrl = p.image_path
+  ? publicImageUrl(p.image_path)
+  : "/images/default-protest.jpg";
+
 
               return (
                 <article
