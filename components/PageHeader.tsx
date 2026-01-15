@@ -9,6 +9,7 @@ export default function PageHeader({
 }) {
   return (
     <section
+      aria-label="Peaceful protest gathering around the nation unite for a common cause."
       style={{
         width: "100%",
         height: 280,
@@ -18,6 +19,21 @@ export default function PageHeader({
         position: "relative",
       }}
     >
+      {/* Accessible alt text for screen readers */}
+      <img
+        src={imageUrl}
+        alt="Peaceful protest gathering around the nation unite for a common cause."
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+          clip: "rect(0 0 0 0)",
+          whiteSpace: "nowrap",
+        }}
+      />
+
+      {/* Overlay */}
       <div
         style={{
           position: "absolute",
@@ -26,6 +42,7 @@ export default function PageHeader({
         }}
       />
 
+      {/* Content */}
       <div
         style={{
           position: "relative",
