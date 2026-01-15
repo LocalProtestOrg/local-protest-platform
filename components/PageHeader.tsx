@@ -12,16 +12,18 @@ export default function PageHeader({
 
   return (
     <section
-      aria-label={ALT_TEXT}
-      style={{
-        width: "100%",
-        height: 280,
-        backgroundImage: `url("${imageUrl}")`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        position: "relative",
-      }}
-    >
+  aria-label={ALT_TEXT}
+  style={{
+    width: "100%",
+    height: 280,
+    backgroundImage: `url(${imageUrl})`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: "cover",
+    backgroundPosition: "center center",
+    position: "relative",
+  }}
+>
+
       {/* Accessible alt text for screen readers */}
       <img
         src={imageUrl}
