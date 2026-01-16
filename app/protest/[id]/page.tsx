@@ -35,6 +35,9 @@ export default function ProtestDetailPage() {
   const params = useParams<{ id: string }>();
   const protestId = params.id;
 
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const [protest, setProtest] = useState<Protest | null>(null);
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +53,7 @@ export default function ProtestDetailPage() {
     () => comments.filter((c) => c.status === "visible"),
     [comments]
   );
+  
 
   const hiddenComments = useMemo(
     () => comments.filter((c) => c.status === "hidden"),
@@ -118,6 +122,87 @@ export default function ProtestDetailPage() {
 
     setComments((c as CommentRow[]) ?? []);
   }
+
+  async function replaceCoverImage() {
+  setMsg("");
+
+  if (!isOrganizer) {
+    setMsg("Only the organizer can replace the image.");
+    return;
+  }
+
+  if (!newImageFile) {
+    setMsg("Please choose an image file first.");
+    return;
+  }
+
+  const allowed = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowed.includes(newImageFile.type)) {
+    setMsg("Image must be a JPG, PNG, or WEBP file.");
+    return;
+  }
+
+  const maxBytes = 5 * 1024 * 1024; // 5MB
+  if (newImageFile.size > maxBytes) {
+    setMsg("Image is too large (max 5MB).");
+    return;
+  }
+
+  try {
+    setUploadingImage(true);
+
+    const ext =
+      newImageFile.type === "image/png"
+        ? "png"
+        : newImageFile.type === "image/webp"
+        ? "webp"
+        : "jpg";
+
+    // Use a consistent path so it truly "replaces"
+    const filePath = `protests/${protestId}/cover.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("protest-images")
+      .upload(filePath, newImageFile, {
+        upsert: true,
+        cacheControl: "3600",
+        contentType: newImageFile.type,
+      });
+
+    if (uploadErr) {
+      setMsg(uploadErr.message);
+      return;
+    }
+
+    const { error: updateErr } = await supabase
+      .from("protests")
+      .update({ image_path: filePath })
+      .eq("id", protestId);
+
+    if (updateErr) {
+      setMsg(updateErr.message);
+      return;
+    }
+
+    // Refresh the protest row so the UI updates right away
+    const { data: p, error: pErr } = await supabase
+      .from("protests")
+      .select("*")
+      .eq("id", protestId)
+      .single();
+
+    if (pErr) {
+      setMsg("Image updated, but refresh failed: " + pErr.message);
+      return;
+    }
+
+    setProtest(p as any);
+    setNewImageFile(null);
+    setMsg("Cover image updated.");
+  } finally {
+    setUploadingImage(false);
+  }
+}
 
   async function postComment() {
     setMsg("");
@@ -211,6 +296,34 @@ export default function ProtestDetailPage() {
             }}
           />
         )}
+{isOrganizer && (
+  <section
+    style={{
+      marginTop: 18,
+      padding: 14,
+      border: "1px solid #e5e5e5",
+      borderRadius: 12,
+      background: "white",
+    }}
+  >
+    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Replace cover image</h3>
+    <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
+      Choose a new image to replace the current cover image for this listing.
+    </p>
+
+    <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(e) => setNewImageFile(e.target.files?.[0] ?? null)}
+      />
+
+      <button onClick={replaceCoverImage} disabled={uploadingImage || !newImageFile}>
+        {uploadingImage ? "Uploading..." : "Replace image"}
+      </button>
+    </div>
+  </section>
+)}
 
         <p style={{ marginTop: 14 }}>{protest.description}</p>
 
