@@ -151,15 +151,9 @@ export default function ProtestDetailPage() {
   try {
     setUploadingImage(true);
 
-    const ext =
-      newImageFile.type === "image/png"
-        ? "png"
-        : newImageFile.type === "image/webp"
-        ? "webp"
-        : "jpg";
+    // Always use one consistent path so it truly replaces (no duplicates / fewer cache issues)
+const filePath = `protests/${protestId}/cover.jpg`;
 
-    // Use a consistent path so it truly "replaces"
-    const filePath = `protests/${protestId}/cover.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
       .from("protest-images")
@@ -266,8 +260,9 @@ export default function ProtestDetailPage() {
   const headerSubtitle = timeLine ? `${locationLine} • ${timeLine}` : locationLine;
 
   const uploadedImageUrl = protest.image_path
-    ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl
-    : null;
+  ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl +
+    `?v=${encodeURIComponent(protest.created_at ?? Date.now().toString())}`
+  : null;
 
   return (
     <>
