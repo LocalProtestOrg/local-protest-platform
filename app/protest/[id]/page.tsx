@@ -17,6 +17,10 @@ type Protest = {
   event_time: string | null;
   created_at: string;
   image_path: string | null;
+
+  // Moderation fields
+  status: string; // "active" | "under_review" | "hidden"
+  report_count: number;
 };
 
 type CommentRow = {
@@ -47,8 +51,6 @@ function secondsRemaining(protestId: string) {
 
 function violatesStandards(text: string) {
   const t = (text || "").toLowerCase();
-
-  // MVP list: keep short and obvious; expand later.
   const banned = ["kill yourself", "gas the", "lynch", "rape", "nazi", "kkk"];
   return banned.some((w) => t.includes(w));
 }
@@ -118,7 +120,9 @@ export default function ProtestDetailPage() {
 
       const protestRow = p as Protest;
       setProtest(protestRow);
-      setIsOrganizer(!!uid && protestRow.user_id === uid);
+
+      const organizer = !!uid && protestRow.user_id === uid;
+      setIsOrganizer(organizer);
 
       const { data: c, error: cErr } = await supabase
         .from("comments")
@@ -133,12 +137,11 @@ export default function ProtestDetailPage() {
         setComments((c as CommentRow[]) ?? []);
       }
 
-      // Initialize cooldown display if user recently posted
       try {
         const remaining = secondsRemaining(protestId);
         setCooldownLeft(remaining);
       } catch {
-        // localStorage can fail in some environments; ignore
+        // ignore localStorage failures
       }
 
       setLoading(false);
@@ -194,7 +197,6 @@ export default function ProtestDetailPage() {
     try {
       setUploadingImage(true);
 
-      // Always use one consistent path (avoids duplicates & caching confusion)
       const filePath = `protests/${protestId}/cover.jpg`;
 
       const { error: uploadErr } = await supabase.storage
@@ -242,7 +244,6 @@ export default function ProtestDetailPage() {
   async function postComment() {
     setMsg("");
 
-    // Rate limit (per browser)
     try {
       const remaining = secondsRemaining(protestId);
       if (remaining > 0) {
@@ -259,7 +260,6 @@ export default function ProtestDetailPage() {
       return;
     }
 
-    // Basic community standards filter (MVP)
     if (violatesStandards(body) || violatesStandards(authorName)) {
       setMsg("This comment appears to violate community standards. Please revise.");
       return;
@@ -278,7 +278,6 @@ export default function ProtestDetailPage() {
     setAuthorName("");
     setBody("");
 
-    // Save cooldown timestamp
     try {
       localStorage.setItem(commentCooldownKey(protestId), String(Date.now()));
       setCooldownLeft(COMMENT_COOLDOWN_SECONDS);
@@ -337,6 +336,19 @@ export default function ProtestDetailPage() {
   if (loading) return <main style={{ padding: 24 }}>Loading…</main>;
   if (!protest) return <main style={{ padding: 24 }}>Not found. {msg}</main>;
 
+  // Public cannot view under_review/hidden listings
+  if (protest.status !== "active" && !isOrganizer) {
+    return (
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+        <Link href="/">← Back</Link>
+        <h1 style={{ marginTop: 18, fontSize: 24, fontWeight: 800 }}>Listing unavailable</h1>
+        <p style={{ marginTop: 10, color: "#444" }}>
+          This listing is currently unavailable or under review.
+        </p>
+      </main>
+    );
+  }
+
   const locationLine =
     protest.city && protest.state
       ? `${protest.city}, ${protest.state}`
@@ -353,18 +365,13 @@ export default function ProtestDetailPage() {
     ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl
     : null;
 
-  // Cache-bust so replacements appear immediately
   const uploadedImageUrl = baseUploadedImageUrl
     ? `${baseUploadedImageUrl}?v=${encodeURIComponent(protest.image_path || "")}&t=${Date.now()}`
     : null;
 
   return (
     <>
-      <PageHeader
-        title={protest.title}
-        subtitle={headerSubtitle}
-        imageUrl="/images/protest-hero.jpg"
-      />
+      <PageHeader title={protest.title} subtitle={headerSubtitle} imageUrl="/images/protest-hero.jpg" />
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
@@ -375,7 +382,26 @@ export default function ProtestDetailPage() {
           </div>
         </header>
 
-        {/* Organizer-uploaded cover image (optional) */}
+        {/* Organizer status banner */}
+        {isOrganizer && protest.status !== "active" && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #f0c36d",
+              background: "#fff7e6",
+              color: "#5a3b00",
+            }}
+          >
+            <strong>Status:</strong> {protest.status.replace("_", " ")}
+            {typeof protest.report_count === "number" ? ` • Reports: ${protest.report_count}` : null}
+            <div style={{ marginTop: 6, fontSize: 13 }}>
+              This listing is hidden from the public while it is under review.
+            </div>
+          </div>
+        )}
+
         {uploadedImageUrl && (
           <img
             src={uploadedImageUrl}
@@ -391,7 +417,6 @@ export default function ProtestDetailPage() {
           />
         )}
 
-        {/* Replace image (organizer only) */}
         {isOrganizer && (
           <section
             style={{
@@ -402,9 +427,7 @@ export default function ProtestDetailPage() {
               background: "white",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>
-              Replace cover image
-            </h3>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Replace cover image</h3>
             <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
               Choose a new image to replace the current cover image for this listing.
             </p>
@@ -533,9 +556,7 @@ export default function ProtestDetailPage() {
           {isOrganizer && (
             <>
               <hr style={{ margin: "24px 0" }} />
-              <h3 style={{ fontSize: 16, fontWeight: 800 }}>
-                Hidden comments (Organizer view)
-              </h3>
+              <h3 style={{ fontSize: 16, fontWeight: 800 }}>Hidden comments (Organizer view)</h3>
 
               <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
                 {hiddenComments.length === 0 ? (

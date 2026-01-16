@@ -14,6 +14,7 @@ type ProtestRow = {
   created_at: string | null;
   organizer_username: string | null;
   image_path: string | null;
+  status: string | null;
 };
 
 const GLOBAL_ALT =
@@ -26,7 +27,8 @@ function publicImageUrl(path: string) {
 export default async function HomePage() {
   const { data, error } = await supabase
     .from("protests")
-    .select("id,title,description,city,state,event_time,created_at,organizer_username,image_path")
+    .select("id,title,description,city,state,event_time,created_at,organizer_username,image_path,status")
+    .eq("status", "active")
     .order("created_at", { ascending: false });
 
   const protests = (data ?? []) as ProtestRow[];
@@ -66,10 +68,7 @@ export default async function HomePage() {
               const href = "/protest/" + p.id;
               const when = p.event_time ? new Date(p.event_time).toLocaleString() : "";
               const location = (p.city ?? "—") + ", " + (p.state ?? "—");
-              const thumbUrl = p.image_path
-  ? publicImageUrl(p.image_path)
-  : "/images/default-protest.jpg";
-
+              const thumbUrl = p.image_path ? publicImageUrl(p.image_path) : "/images/default-protest.jpg";
 
               return (
                 <article
@@ -81,20 +80,17 @@ export default async function HomePage() {
                     background: "white",
                   }}
                 >
-                  {/* Thumbnail (optional) */}
-                  {thumbUrl ? (
-                    <img
-                      src={thumbUrl}
-                      alt={GLOBAL_ALT}
-                      style={{
-                        width: "100%",
-                        height: 220,
-                        objectFit: "cover",
-                        display: "block",
-                      }}
-                      loading="lazy"
-                    />
-                  ) : null}
+                  <img
+                    src={thumbUrl}
+                    alt={GLOBAL_ALT}
+                    style={{
+                      width: "100%",
+                      height: 220,
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                    loading="lazy"
+                  />
 
                   <div style={{ padding: 16 }}>
                     <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>{p.title}</h2>
