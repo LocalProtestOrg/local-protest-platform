@@ -31,12 +31,31 @@ type CommentRow = {
 const GLOBAL_ALT =
   "Peaceful protest gathering around the nation unite for a common cause.";
 
+const COMMENT_COOLDOWN_SECONDS = 20;
+
+function commentCooldownKey(protestId: string) {
+  return `la:last_comment_ts:${protestId}`;
+}
+
+function secondsRemaining(protestId: string) {
+  const raw = localStorage.getItem(commentCooldownKey(protestId));
+  const last = raw ? Number(raw) : 0;
+  const now = Date.now();
+  const diff = Math.floor((now - last) / 1000);
+  return Math.max(0, COMMENT_COOLDOWN_SECONDS - diff);
+}
+
+function violatesStandards(text: string) {
+  const t = (text || "").toLowerCase();
+
+  // MVP list: keep short and obvious; expand later.
+  const banned = ["kill yourself", "gas the", "lynch", "rape", "nazi", "kkk"];
+  return banned.some((w) => t.includes(w));
+}
+
 export default function ProtestDetailPage() {
   const params = useParams<{ id: string }>();
   const protestId = params.id;
-
-  const [newImageFile, setNewImageFile] = useState<File | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [protest, setProtest] = useState<Protest | null>(null);
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -49,11 +68,23 @@ export default function ProtestDetailPage() {
   const [body, setBody] = useState("");
   const [msg, setMsg] = useState("");
 
+  // Replace image (organizer-only)
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Comment cooldown
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+
+  // Report listing
+  const [reportReason, setReportReason] = useState("");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportMsg, setReportMsg] = useState("");
+  const [reporting, setReporting] = useState(false);
+
   const visibleComments = useMemo(
     () => comments.filter((c) => c.status === "visible"),
     [comments]
   );
-  
 
   const hiddenComments = useMemo(
     () => comments.filter((c) => c.status === "hidden"),
@@ -61,16 +92,16 @@ export default function ProtestDetailPage() {
   );
 
   useEffect(() => {
+    if (!protestId) return;
+
     (async () => {
       setLoading(true);
       setMsg("");
 
-      // Who is viewing?
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData.user?.id ?? null;
       setViewerUserId(uid);
 
-      // Load protest
       const { data: p, error: pErr } = await supabase
         .from("protests")
         .select("*")
@@ -80,17 +111,15 @@ export default function ProtestDetailPage() {
       if (pErr) {
         setMsg(pErr.message);
         setProtest(null);
+        setComments([]);
         setLoading(false);
         return;
       }
 
       const protestRow = p as Protest;
       setProtest(protestRow);
-
-      // Organizer check
       setIsOrganizer(!!uid && protestRow.user_id === uid);
 
-      // Load comments
       const { data: c, error: cErr } = await supabase
         .from("comments")
         .select("*")
@@ -104,9 +133,23 @@ export default function ProtestDetailPage() {
         setComments((c as CommentRow[]) ?? []);
       }
 
+      // Initialize cooldown display if user recently posted
+      try {
+        const remaining = secondsRemaining(protestId);
+        setCooldownLeft(remaining);
+      } catch {
+        // localStorage can fail in some environments; ignore
+      }
+
       setLoading(false);
     })();
   }, [protestId]);
+
+  useEffect(() => {
+    if (cooldownLeft <= 0) return;
+    const t = setInterval(() => setCooldownLeft((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldownLeft]);
 
   async function refreshComments() {
     const { data: c, error } = await supabase
@@ -124,85 +167,101 @@ export default function ProtestDetailPage() {
   }
 
   async function replaceCoverImage() {
-  setMsg("");
+    setMsg("");
 
-  if (!isOrganizer) {
-    setMsg("Only the organizer can replace the image.");
-    return;
-  }
-
-  if (!newImageFile) {
-    setMsg("Please choose an image file first.");
-    return;
-  }
-
-  const allowed = ["image/jpeg", "image/png", "image/webp"];
-  if (!allowed.includes(newImageFile.type)) {
-    setMsg("Image must be a JPG, PNG, or WEBP file.");
-    return;
-  }
-
-  const maxBytes = 5 * 1024 * 1024; // 5MB
-  if (newImageFile.size > maxBytes) {
-    setMsg("Image is too large (max 5MB).");
-    return;
-  }
-
-  try {
-    setUploadingImage(true);
-
-    // Always use one consistent path so it truly replaces (no duplicates / fewer cache issues)
-const filePath = `protests/${protestId}/cover.jpg`;
-
-
-    const { error: uploadErr } = await supabase.storage
-      .from("protest-images")
-      .upload(filePath, newImageFile, {
-        upsert: true,
-        cacheControl: "3600",
-        contentType: newImageFile.type,
-      });
-
-    if (uploadErr) {
-      setMsg(uploadErr.message);
+    if (!isOrganizer) {
+      setMsg("Only the organizer can replace the image.");
       return;
     }
 
-    const { error: updateErr } = await supabase
-      .from("protests")
-      .update({ image_path: filePath })
-      .eq("id", protestId);
-
-    if (updateErr) {
-      setMsg(updateErr.message);
+    if (!newImageFile) {
+      setMsg("Please choose an image file first.");
       return;
     }
 
-    // Refresh the protest row so the UI updates right away
-    const { data: p, error: pErr } = await supabase
-      .from("protests")
-      .select("*")
-      .eq("id", protestId)
-      .single();
-
-    if (pErr) {
-      setMsg("Image updated, but refresh failed: " + pErr.message);
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(newImageFile.type)) {
+      setMsg("Image must be a JPG, PNG, or WEBP file.");
       return;
     }
 
-    setProtest(p as any);
-    setNewImageFile(null);
-    setMsg("Cover image updated.");
-  } finally {
-    setUploadingImage(false);
+    const maxBytes = 5 * 1024 * 1024; // 5MB
+    if (newImageFile.size > maxBytes) {
+      setMsg("Image is too large (max 5MB).");
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+
+      // Always use one consistent path (avoids duplicates & caching confusion)
+      const filePath = `protests/${protestId}/cover.jpg`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("protest-images")
+        .upload(filePath, newImageFile, {
+          upsert: true,
+          cacheControl: "3600",
+          contentType: newImageFile.type,
+        });
+
+      if (uploadErr) {
+        setMsg(uploadErr.message);
+        return;
+      }
+
+      const { error: updateErr } = await supabase
+        .from("protests")
+        .update({ image_path: filePath })
+        .eq("id", protestId);
+
+      if (updateErr) {
+        setMsg(updateErr.message);
+        return;
+      }
+
+      const { data: p, error: pErr } = await supabase
+        .from("protests")
+        .select("*")
+        .eq("id", protestId)
+        .single();
+
+      if (pErr) {
+        setMsg("Image updated, but refresh failed: " + pErr.message);
+        return;
+      }
+
+      setProtest(p as Protest);
+      setNewImageFile(null);
+      setMsg("Cover image updated.");
+    } finally {
+      setUploadingImage(false);
+    }
   }
-}
 
   async function postComment() {
     setMsg("");
 
+    // Rate limit (per browser)
+    try {
+      const remaining = secondsRemaining(protestId);
+      if (remaining > 0) {
+        setCooldownLeft(remaining);
+        setMsg(`Please wait ${remaining}s before posting another comment.`);
+        return;
+      }
+    } catch {
+      // ignore localStorage failure
+    }
+
     if (!authorName.trim() || !body.trim()) {
       setMsg("Name and comment are required.");
+      return;
+    }
+
+    // Basic community standards filter (MVP)
+    if (violatesStandards(body) || violatesStandards(authorName)) {
+      setMsg("This comment appears to violate community standards. Please revise.");
       return;
     }
 
@@ -218,29 +277,61 @@ const filePath = `protests/${protestId}/cover.jpg`;
 
     setAuthorName("");
     setBody("");
+
+    // Save cooldown timestamp
+    try {
+      localStorage.setItem(commentCooldownKey(protestId), String(Date.now()));
+      setCooldownLeft(COMMENT_COOLDOWN_SECONDS);
+    } catch {
+      // ignore localStorage failure
+    }
+
     await refreshComments();
   }
 
   async function setCommentStatus(commentId: string, status: "visible" | "hidden") {
     setMsg("");
-
-    const { error } = await supabase
-      .from("comments")
-      .update({ status })
-      .eq("id", commentId);
-
+    const { error } = await supabase.from("comments").update({ status }).eq("id", commentId);
     if (error) return setMsg(error.message);
-
     await refreshComments();
   }
 
   async function deleteComment(commentId: string) {
     setMsg("");
-
     const { error } = await supabase.from("comments").delete().eq("id", commentId);
     if (error) return setMsg(error.message);
-
     await refreshComments();
+  }
+
+  async function submitReport() {
+    setReportMsg("");
+    setMsg("");
+
+    if (!reportReason.trim()) {
+      setReportMsg("Please select a reason.");
+      return;
+    }
+
+    try {
+      setReporting(true);
+
+      const { error } = await supabase.from("reports").insert({
+        protest_id: protestId,
+        reason: reportReason.trim(),
+        details: reportDetails.trim() || null,
+      });
+
+      if (error) {
+        setReportMsg(error.message);
+        return;
+      }
+
+      setReportMsg("Thank you. Your report has been submitted.");
+      setReportReason("");
+      setReportDetails("");
+    } finally {
+      setReporting(false);
+    }
   }
 
   if (loading) return <main style={{ padding: 24 }}>Loading…</main>;
@@ -256,17 +347,24 @@ const filePath = `protests/${protestId}/cover.jpg`;
       : "Location not provided";
 
   const timeLine = protest.event_time ? new Date(protest.event_time).toLocaleString() : null;
-
   const headerSubtitle = timeLine ? `${locationLine} • ${timeLine}` : locationLine;
 
-  const uploadedImageUrl = protest.image_path
-  ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl +
-    `?v=${encodeURIComponent(protest.created_at ?? Date.now().toString())}`
-  : null;
+  const baseUploadedImageUrl = protest.image_path
+    ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl
+    : null;
+
+  // Cache-bust so replacements appear immediately
+  const uploadedImageUrl = baseUploadedImageUrl
+    ? `${baseUploadedImageUrl}?v=${encodeURIComponent(protest.image_path || "")}&t=${Date.now()}`
+    : null;
 
   return (
     <>
-      <PageHeader title={protest.title} subtitle={headerSubtitle} imageUrl="/images/protest-hero.jpg" />
+      <PageHeader
+        title={protest.title}
+        subtitle={headerSubtitle}
+        imageUrl="/images/protest-hero.jpg"
+      />
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
@@ -288,43 +386,92 @@ const filePath = `protests/${protestId}/cover.jpg`;
               marginTop: 16,
               border: "1px solid #e5e5e5",
               background: "white",
+              display: "block",
             }}
           />
         )}
-{isOrganizer && (
-  <section
-    style={{
-      marginTop: 18,
-      padding: 14,
-      border: "1px solid #e5e5e5",
-      borderRadius: 12,
-      background: "white",
-    }}
-  >
-    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Replace cover image</h3>
-    <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
-      Choose a new image to replace the current cover image for this listing.
-    </p>
 
-    <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-      <input
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        onChange={(e) => setNewImageFile(e.target.files?.[0] ?? null)}
-      />
+        {/* Replace image (organizer only) */}
+        {isOrganizer && (
+          <section
+            style={{
+              marginTop: 18,
+              padding: 14,
+              border: "1px solid #e5e5e5",
+              borderRadius: 12,
+              background: "white",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>
+              Replace cover image
+            </h3>
+            <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
+              Choose a new image to replace the current cover image for this listing.
+            </p>
 
-      <button onClick={replaceCoverImage} disabled={uploadingImage || !newImageFile}>
-        {uploadingImage ? "Uploading..." : "Replace image"}
-      </button>
-    </div>
-  </section>
-)}
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => setNewImageFile(e.target.files?.[0] ?? null)}
+              />
+
+              <button onClick={replaceCoverImage} disabled={uploadingImage || !newImageFile}>
+                {uploadingImage ? "Uploading..." : "Replace image"}
+              </button>
+            </div>
+          </section>
+        )}
 
         <p style={{ marginTop: 14 }}>{protest.description}</p>
 
         <p style={{ marginTop: 10, color: "#444" }}>
           Organizer: <strong>@{protest.organizer_username ?? "unknown"}</strong>
         </p>
+
+        {/* Report listing */}
+        <section
+          style={{
+            marginTop: 16,
+            padding: 14,
+            border: "1px solid #e5e5e5",
+            borderRadius: 12,
+            background: "white",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Report this listing</h3>
+          <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
+            Use this form to flag spam, unsafe content, or non-event posts. This platform is neutral and does not endorse listings.
+          </p>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            <select value={reportReason} onChange={(e) => setReportReason(e.target.value)}>
+              <option value="">Select a reason…</option>
+              <option value="Spam / scam">Spam / scam</option>
+              <option value="Harassment / hate">Harassment / hate</option>
+              <option value="Violence / threats">Violence / threats</option>
+              <option value="False / misleading event">False / misleading event</option>
+              <option value="Other">Other</option>
+            </select>
+
+            <textarea
+              placeholder="Optional details (what happened / what to review)"
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              rows={3}
+            />
+
+            <button onClick={submitReport} disabled={reporting || !reportReason}>
+              {reporting ? "Submitting..." : "Submit report"}
+            </button>
+
+            {reportMsg && (
+              <p style={{ color: reportMsg.startsWith("Thank") ? "green" : "#b00020" }}>
+                {reportMsg}
+              </p>
+            )}
+          </div>
+        </section>
 
         <hr style={{ margin: "24px 0" }} />
 
@@ -340,13 +487,18 @@ const filePath = `protests/${protestId}/cover.jpg`;
               value={authorName}
               onChange={(e) => setAuthorName(e.target.value)}
             />
+
             <textarea
               placeholder="Comment"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={4}
             />
-            <button onClick={postComment}>Post comment</button>
+
+            <button onClick={postComment} disabled={cooldownLeft > 0}>
+              {cooldownLeft > 0 ? `Please wait (${cooldownLeft}s)` : "Post comment"}
+            </button>
+
             {msg && <p style={{ color: "#b00020" }}>{msg}</p>}
           </div>
 
@@ -381,7 +533,9 @@ const filePath = `protests/${protestId}/cover.jpg`;
           {isOrganizer && (
             <>
               <hr style={{ margin: "24px 0" }} />
-              <h3 style={{ fontSize: 16, fontWeight: 800 }}>Hidden comments (Organizer view)</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 800 }}>
+                Hidden comments (Organizer view)
+              </h3>
 
               <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
                 {hiddenComments.length === 0 ? (
