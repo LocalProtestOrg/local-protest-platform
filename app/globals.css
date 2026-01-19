@@ -24,3 +24,74 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+black-button, .black-button-link {
+    background-color: #000; /* Black background color */
+    color: #fff; /* White text color */
+    font-weight: bold; /* Bold text */
+    padding: 10px 20px; /* Some padding for size */
+    border: none; /* Remove default border */
+    cursor: pointer; /* Change cursor to pointer on hover */
+    text-decoration: none; /* Remove underline for links */
+    display: inline-block; /* Allows anchor tags to be styled like buttons */
+    border-radius: 5px; /* Optional: rounded corners */
+    font-size: 16px; /* Optional: set font size */
+}
+
+/* Optional: Add a hover effect for better user experience */
+.black-button:hover, .black-button-link:hover {
+    background-color: #333; /* Slightly lighter black on hover */
+}
+
+button:hover {
+  background: #000;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+input,
+textarea,
+select {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #000;
+}
+
+
+a {
+  color: #000;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+
+body {
+  margin: 0;
+  background: #fafafa;
+  color: #111;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}
+
+p {
+  line-height: 1.5;
+}
+
+

@@ -10,8 +10,14 @@ const nextConfig = {
         protocol: "https",
         hostname: "plus.unsplash.com",
       },
+      {
+        protocol: "https",
+        hostname: "xtzupkndvddpwzfremjd.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
     ],
   },
 };
 
 module.exports = nextConfig;
+
