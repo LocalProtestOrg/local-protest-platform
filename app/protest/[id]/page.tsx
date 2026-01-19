@@ -50,7 +50,10 @@ function resolveImageSrc(image_path: string | null) {
   if (p.startsWith("http://") || p.startsWith("https://")) return p;
 
   // Local public file path already
-  if (p.startsWith("/")) return p;
+  if (p.startsWith("http://") || p.startsWith("https://")) return p;
+if (p.startsWith("/")) return p;
+if (p.startsWith("images/")) return "/" + p;
+
 
   // Legacy/local filenames stored in DB
   if (p === "fallback.jpg") return FALLBACK_LOCAL;
