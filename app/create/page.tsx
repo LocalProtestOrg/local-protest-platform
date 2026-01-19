@@ -1,318 +1,262 @@
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
-import { EVENT_TYPES, ACCESSIBILITY_FEATURES } from "@/lib/eventOptions";
+import HeroSearch from "@/components/HeroSearch";
+import ProtestCard from "@/components/ProtestCard";
+import { supabase } from "@/lib/supabase";
 
-export default function CreatePage() {
-  const router = useRouter();
-  const [imageFile, setImageFile] = useState<File | null>(null);
+export const revalidate = 0;
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [city, setCity] = useState("");
-  const [stateVal, setStateVal] = useState("");
-  const [eventTime, setEventTime] = useState(""); // ISO-ish from input
-  const [msg, setMsg] = useState("");
+type ProtestRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  city: string | null;
+  state: string | null;
+  event_time: string | null;
+  created_at: string | null;
+  organizer_username: string | null;
+  image_path: string | null;
+  status: string | null;
 
-  // ✅ NEW: event type + accessibility
-  const [eventType, setEventType] = useState<string>(""); // single selection, stored as [eventType]
-  const [isAccessible, setIsAccessible] = useState(false);
-  const [accessFeatures, setAccessFeatures] = useState<string[]>([]);
+  // Filters / new fields
+  event_types: string[] | null;
+  is_accessible: boolean | null;
+  accessibility_features: string[] | null;
+};
 
-  const [userId, setUserId] = useState<string | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
+// ✅ Next 16: searchParams may be a Promise
+type PageProps = {
+  searchParams?: Promise<{
+    q?: string;
+    types?: string; // comma-separated
+    accessible?: string; // "true" | "false"
+    features?: string; // comma-separated
+  }>;
+};
 
-  // If any accessibility feature is selected, force isAccessible true
-  useEffect(() => {
-    if (accessFeatures.length > 0) setIsAccessible(true);
-  }, [accessFeatures]);
+export const metadata: Metadata = {
+  title: "Local Assembly — Find Protests, Rallies, Town Halls & Civic Events Near You",
+  description:
+    "Local Assembly is a neutral, community-submitted directory of public demonstrations, rallies, town halls, voter registration drives, and civic gatherings across the United States.",
+  alternates: { canonical: "https://localassembly.org/" },
+  openGraph: {
+    type: "website",
+    url: "https://localassembly.org/",
+    title: "Local Assembly — Civic Events Near You",
+    description:
+      "Browse and search community-submitted civic gatherings across the U.S. This platform is neutral and does not endorse listings.",
+    siteName: "Local Assembly",
+    images: [
+      {
+        url: "https://localassembly.org/images/home-hero.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Local Assembly civic gathering listings",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Local Assembly — Civic Events Near You",
+    description:
+      "Search and browse community-submitted civic events across the U.S. Neutral platform; no endorsements.",
+    images: ["https://localassembly.org/images/home-hero.jpg"],
+  },
+  robots: { index: true, follow: true },
+};
 
-  const accessibilityHint = useMemo(() => {
-    if (!isAccessible) return "Mark this event accessible if accommodations are available.";
-    if (accessFeatures.length === 0) return "Select accessibility features below (recommended).";
-    return `${accessFeatures.length} accessibility feature(s) selected.`;
-  }, [isAccessible, accessFeatures.length]);
+function stripHtml(s: string) {
+  return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const uid = data.user?.id ?? null;
+function safeText(s: string, max = 200) {
+  const t = stripHtml(s || "");
+  if (t.length <= max) return t;
+  return t.slice(0, max - 1) + "…";
+}
 
-      if (!uid) {
-        router.push("/login");
-        return;
-      }
+function parseCsvParam(v: string | undefined) {
+  if (!v) return [];
+  const parts = v
+    .split(",")
+    .map((s) => decodeURIComponent(s).trim())
+    .filter(Boolean);
+  return Array.from(new Set(parts));
+}
 
-      setUserId(uid);
+function parseAccessibleParam(v: string | undefined): boolean | null {
+  if (!v) return null;
+  const t = v.trim().toLowerCase();
+  if (t === "true") return true;
+  if (t === "false") return false;
+  return null;
+}
 
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", uid)
-        .single();
+export default async function HomePage({ searchParams }: PageProps) {
+  // ✅ Await searchParams if it's a Promise
+  const sp = (await searchParams) ?? {};
 
-      setUsername((prof as any)?.username ?? null);
-    })();
-  }, [router]);
+  const q = (sp.q ?? "").trim();
+  const types = parseCsvParam(sp.types);
+  const features = parseCsvParam(sp.features);
+  const accessible = parseAccessibleParam(sp.accessible);
 
-  function toggleAccessFeature(feature: string) {
-    setAccessFeatures((prev) => {
-      if (prev.includes(feature)) return prev.filter((f) => f !== feature);
-      return [...prev, feature].sort((a, b) => a.localeCompare(b));
-    });
+  let query = supabase
+    .from("protests")
+    .select(
+      "id,title,description,city,state,event_time,created_at,organizer_username,image_path,status,event_types,is_accessible,accessibility_features"
+    )
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  // Keyword search
+  if (q) {
+    const escaped = q.replaceAll(",", " ");
+    query = query.or(
+      [
+        `title.ilike.%${escaped}%`,
+        `description.ilike.%${escaped}%`,
+        `city.ilike.%${escaped}%`,
+        `state.ilike.%${escaped}%`,
+        `organizer_username.ilike.%${escaped}%`,
+      ].join(",")
+    );
   }
 
-  async function createListing() {
-    setMsg("");
-
-    if (!title.trim() || !description.trim()) {
-      setMsg("Title and description are required.");
-      return;
-    }
-
-    if (!userId) {
-      setMsg("You must be logged in.");
-      return;
-    }
-
-    // Optional: require event type (recommended for future filters)
-    if (!eventType) {
-      setMsg("Please choose a type of event.");
-      return;
-    }
-
-    // Simple client-side image checks (recommended)
-    if (imageFile) {
-      const allowed = ["image/jpeg", "image/png", "image/webp"];
-      if (!allowed.includes(imageFile.type)) {
-        setMsg("Image must be a JPG, PNG, or WEBP file.");
-        return;
-      }
-      const maxBytes = 5 * 1024 * 1024; // 5MB
-      if (imageFile.size > maxBytes) {
-        setMsg("Image is too large (max 5MB).");
-        return;
-      }
-    }
-
-    const event_time_value = eventTime ? new Date(eventTime).toISOString() : null;
-
-    // ✅ Store event_types as text[]; for now one selection -> [eventType]
-    const event_types_value = eventType ? [eventType] : [];
-
-    // ✅ accessibility_features should be an array (text[] or jsonb)
-    const accessibility_features_value = isAccessible ? accessFeatures : [];
-
-    // 1) Create the protest row first
-    const { data: created, error: createErr } = await supabase
-      .from("protests")
-      .insert({
-        user_id: userId,
-        organizer_username: username ?? "unknown",
-        title: title.trim(),
-        description: description.trim(),
-        city: city.trim() || null,
-        state: stateVal.trim() || null,
-        event_time: event_time_value,
-
-        // ✅ NEW FIELDS
-        event_types: event_types_value,
-        is_accessible: isAccessible,
-        accessibility_features: accessibility_features_value,
-      })
-      .select("id")
-      .single();
-
-    if (createErr) {
-      setMsg(createErr.message);
-      return;
-    }
-
-    const protestId = (created as any)?.id as string;
-
-    // 2) Upload image (optional)
-    if (imageFile) {
-      const ext =
-        imageFile.type === "image/png"
-          ? "png"
-          : imageFile.type === "image/webp"
-          ? "webp"
-          : "jpg";
-
-      const filePath = `protests/${protestId}/cover.${ext}`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from("protest-images")
-        .upload(filePath, imageFile, {
-          upsert: true,
-          cacheControl: "3600",
-          contentType: imageFile.type,
-        });
-
-      if (uploadErr) {
-        setMsg("Listing created, but image upload failed: " + uploadErr.message);
-        router.push("/protest/" + protestId);
-        return;
-      }
-
-      // 3) Save image path on the protest row
-      const { error: updateErr } = await supabase
-        .from("protests")
-        .update({ image_path: filePath })
-        .eq("id", protestId);
-
-      if (updateErr) {
-        setMsg("Listing created, but saving image path failed: " + updateErr.message);
-        router.push("/protest/" + protestId);
-        return;
-      }
-    }
-
-    router.push("/protest/" + protestId);
+  // Event types filter (text[])
+  if (types.length > 0) {
+    query = query.overlaps("event_types", types);
   }
+
+  // Accessible filter (boolean)
+  if (accessible !== null) {
+    query = query.eq("is_accessible", accessible);
+  }
+
+  // Accessibility features filter (text[])
+  if (features.length > 0) {
+    query = query.overlaps("accessibility_features", features);
+  }
+
+  const { data, error } = await query;
+  const protests = (data ?? []) as ProtestRow[];
+
+  const appliedFiltersLabel = [
+    q ? `q="${q}"` : null,
+    types.length ? `types=${types.join("|")}` : null,
+    accessible !== null ? `accessible=${String(accessible)}` : null,
+    features.length ? `features=${features.join("|")}` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        name: "Local Assembly",
+        url: "https://localassembly.org/",
+        description:
+          "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
+        potentialAction: {
+          "@type": "SearchAction",
+          target: "https://localassembly.org/?q={search_term_string}",
+          "query-input": "required name=search_term_string",
+        },
+      },
+      {
+        "@type": "ItemList",
+        name: appliedFiltersLabel
+          ? `Listings (${appliedFiltersLabel})`
+          : "Latest civic event listings",
+        itemListOrder: "https://schema.org/ItemListOrderDescending",
+        numberOfItems: protests.length,
+        itemListElement: protests.slice(0, 25).map((p, idx) => ({
+          "@type": "ListItem",
+          position: idx + 1,
+          url: `https://localassembly.org/protest/${p.id}`,
+          name: p.title,
+          description: p.description ? safeText(p.description, 160) : undefined,
+        })),
+      },
+    ],
+  };
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <PageHeader
-        title="Create a Listing"
-        subtitle="Post a public event for your local community. You are responsible for moderating comments on your listing."
+        title="Local Assembly"
+        subtitle="A neutral, community-submitted directory of public demonstrations and civic gatherings."
         imageUrl="/images/home-hero.jpg"
       />
 
-      <main style={{ maxWidth: 720, margin: "0 auto", padding: 24 }}>
+      <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <Link href="/">← Back</Link>
-          <div style={{ display: "flex", gap: 12 }}>
-            <Link href="/login">Login</Link>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>
+              Find civic events near you
+            </h1>
+            <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
+              Search by event name, city, state, or organizer. This platform is neutral and does not
+              endorse or oppose any listing.
+            </p>
           </div>
+
+          <nav style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <Link href="/create">Create</Link>
+            <Link href="/login">Login</Link>
+          </nav>
         </header>
 
-        <h1 style={{ fontSize: 26, fontWeight: 900, marginTop: 16 }}>New Listing</h1>
-
-        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-          <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-
-          <textarea
-            placeholder="Description (what, where to meet, what to bring, accessibility notes, etc.)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={6}
-          />
-
-          {/* ✅ NEW: Event Type */}
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ color: "#444", fontSize: 13 }}>Type of event</span>
-            <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
-              <option value="">Select a type…</option>
-              {EVENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10 }}>
-            <input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
-            <input
-              placeholder="State"
-              value={stateVal}
-              onChange={(e) => setStateVal(e.target.value)}
-              maxLength={2}
-            />
-          </div>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ color: "#444", fontSize: 13 }}>Event time (optional)</span>
-            <input type="datetime-local" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
-          </label>
-
-          {/* ✅ NEW: Accessibility */}
-          <section
-            style={{
-              marginTop: 4,
-              padding: 12,
-              border: "1px solid #e5e5e5",
-              borderRadius: 12,
-              background: "white",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-              <div>
-                <div style={{ fontWeight: 800 }}>Accessibility</div>
-                <div style={{ marginTop: 4, color: "#555", fontSize: 13 }}>{accessibilityHint}</div>
-              </div>
-
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={isAccessible}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setIsAccessible(checked);
-                    if (!checked) setAccessFeatures([]);
-                  }}
-                />
-                <span style={{ fontSize: 13, color: "#333" }}>Accessible</span>
-              </label>
-            </div>
-
-            {isAccessible && (
-              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 13, color: "#444", fontWeight: 700 }}>
-                  Accessibility features (select all that apply)
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {ACCESSIBILITY_FEATURES.map((f) => {
-                    const checked = accessFeatures.includes(f);
-                    return (
-                      <label
-                        key={f}
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          alignItems: "center",
-                          padding: 8,
-                          borderRadius: 10,
-                          border: "1px solid #eee",
-                          background: checked ? "#f7f7ff" : "white",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input type="checkbox" checked={checked} onChange={() => toggleAccessFeature(f)} />
-                        <span style={{ fontSize: 13, color: "#333" }}>{f}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ color: "#444", fontSize: 13 }}>Cover image (optional)</span>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-
-          <button onClick={createListing} style={{ marginTop: 6 }}>
-            Publish listing
-          </button>
-
-          {msg && <p style={{ color: "#b00020" }}>{msg}</p>}
+        <div style={{ marginTop: 18 }}>
+          <HeroSearch />
         </div>
 
-        <p style={{ marginTop: 18, color: "#666", fontSize: 13 }}>
-          Tip: Use clear language and include safety/accessibility details when possible.
-        </p>
+        {error ? (
+          <p style={{ marginTop: 16, color: "crimson" }}>Database error: {error.message}</p>
+        ) : null}
+
+        <div style={{ marginTop: 14, color: "#555" }}>
+          {appliedFiltersLabel ? (
+            <p style={{ margin: 0 }}>
+              Showing results ({protests.length}) • <span>{appliedFiltersLabel}</span>
+            </p>
+          ) : (
+            <p style={{ margin: 0 }}>Showing latest listings ({protests.length})</p>
+          )}
+        </div>
+
+        <section style={{ marginTop: 16, display: "grid", gap: 14 }}>
+          {protests.length === 0 ? (
+            <p>No listings found.</p>
+          ) : (
+            protests.map((p) => (
+              <ProtestCard
+                key={p.id}
+                protest={{
+                  id: p.id,
+                  title: p.title,
+                  description: p.description ?? "",
+                  city: p.city,
+                  state: p.state,
+                  event_time: p.event_time,
+                  image_path: p.image_path,
+                }}
+              />
+            ))
+          )}
+        </section>
+
+        <footer style={{ marginTop: 32, color: "#666", fontSize: 13 }}>
+          Community note: Comments are public. The organizer moderates comments for each listing.
+        </footer>
       </main>
     </>
   );

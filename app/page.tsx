@@ -4,8 +4,10 @@ import PageHeader from "@/components/PageHeader";
 import HeroSearch from "@/components/HeroSearch";
 import ProtestCard from "@/components/ProtestCard";
 import { supabase } from "@/lib/supabase";
+import { unstable_noStore as noStore } from "next/cache";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 type ProtestRow = {
   id: string;
@@ -19,19 +21,19 @@ type ProtestRow = {
   image_path: string | null;
   status: string | null;
 
-  // Filters / new fields
   event_types: string[] | null;
   is_accessible: boolean | null;
   accessibility_features: string[] | null;
 };
 
 type PageProps = {
-  searchParams?: {
+  // ✅ Next 16: treat searchParams as Promise
+  searchParams?: Promise<{
     q?: string;
     types?: string; // comma-separated
     accessible?: string; // "true" | "false"
     features?: string; // comma-separated
-  };
+  }>;
 };
 
 // ✅ Homepage SEO (App Router)
@@ -78,12 +80,10 @@ function safeText(s: string, max = 200) {
 
 function parseCsvParam(v: string | undefined) {
   if (!v) return [];
-  // split by comma, trim, drop empties, dedupe
   const parts = v
     .split(",")
     .map((s) => decodeURIComponent(s).trim())
     .filter(Boolean);
-
   return Array.from(new Set(parts));
 }
 
@@ -95,11 +95,41 @@ function parseAccessibleParam(v: string | undefined): boolean | null {
   return null;
 }
 
+// Escapes % and _ so ilike doesn’t treat them as wildcards from user input
+function escapeIlike(input: string) {
+  return input.replace(/[%_]/g, "\\$&");
+}
+
+// If someone searches "Houston, TX" or "Houston TX", treat it as city/state filter
+function parseCityState(q: string): { city?: string; state?: string } {
+  const raw = q.trim();
+  if (!raw) return {};
+
+  // Normalize comma to space
+  const normalized = raw.replace(",", " ").replace(/\s+/g, " ").trim();
+  const parts = normalized.split(" ");
+
+  // If last token looks like a 2-letter state code, use it
+  const last = parts[parts.length - 1];
+  if (last && /^[A-Za-z]{2}$/.test(last)) {
+    const state = last.toUpperCase();
+    const city = parts.slice(0, -1).join(" ").trim();
+    return { city: city || undefined, state };
+  }
+
+  return {};
+}
+
 export default async function HomePage({ searchParams }: PageProps) {
-  const q = (searchParams?.q ?? "").trim();
-  const types = parseCsvParam(searchParams?.types);
-  const features = parseCsvParam(searchParams?.features);
-  const accessible = parseAccessibleParam(searchParams?.accessible);
+  // ✅ stop Next from caching this render
+  noStore();
+
+  const sp = (await searchParams) ?? {};
+  const q = (sp.q ?? "").trim();
+
+  const types = parseCsvParam(sp.types);
+  const features = parseCsvParam(sp.features);
+  const accessible = parseAccessibleParam(sp.accessible);
 
   let query = supabase
     .from("protests")
@@ -109,40 +139,37 @@ export default async function HomePage({ searchParams }: PageProps) {
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
-  // Keyword search (basic; filter module later)
+  // ✅ Filters
+  if (types.length > 0) query = query.overlaps("event_types", types);
+  if (accessible !== null) query = query.eq("is_accessible", accessible);
+  if (features.length > 0) query = query.overlaps("accessibility_features", features);
+
+  // ✅ Search behavior
   if (q) {
-    const escaped = q.replaceAll(",", " "); // keep the `or()` string safe-ish
-    query = query.or(
-      [
-        `title.ilike.%${escaped}%`,
-        `description.ilike.%${escaped}%`,
-        `city.ilike.%${escaped}%`,
-        `state.ilike.%${escaped}%`,
-        `organizer_username.ilike.%${escaped}%`,
-      ].join(",")
-    );
-  }
+    const { city, state } = parseCityState(q);
 
-  // ✅ Event types filter (text[])
-  if (types.length > 0) {
-    // Postgres array overlap: event_types && ARRAY[...]
-    query = query.overlaps("event_types", types);
-  }
-
-  // ✅ Accessible filter (boolean)
-  if (accessible !== null) {
-    query = query.eq("is_accessible", accessible);
-  }
-
-  // ✅ Accessibility features filter (text[])
-  if (features.length > 0) {
-    query = query.overlaps("accessibility_features", features);
+    // City/state focused query
+    if (city || state) {
+      if (city) query = query.ilike("city", `%${escapeIlike(city)}%`);
+      if (state) query = query.eq("state", state);
+    } else {
+      // General keyword search
+      const escaped = escapeIlike(q.replaceAll(",", " "));
+      query = query.or(
+        [
+          `title.ilike.%${escaped}%`,
+          `description.ilike.%${escaped}%`,
+          `city.ilike.%${escaped}%`,
+          `state.ilike.%${escaped}%`,
+          `organizer_username.ilike.%${escaped}%`,
+        ].join(",")
+      );
+    }
   }
 
   const { data, error } = await query;
   const protests = (data ?? []) as ProtestRow[];
 
-  // Label for results summary / JSON-LD ItemList
   const appliedFiltersLabel = [
     q ? `q="${q}"` : null,
     types.length ? `types=${types.join("|")}` : null,
@@ -152,7 +179,6 @@ export default async function HomePage({ searchParams }: PageProps) {
     .filter(Boolean)
     .join(" • ");
 
-  // ✅ JSON-LD: WebSite + SearchAction + ItemList
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -170,9 +196,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       },
       {
         "@type": "ItemList",
-        name: appliedFiltersLabel
-          ? `Listings (${appliedFiltersLabel})`
-          : "Latest civic event listings",
+        name: appliedFiltersLabel ? `Listings (${appliedFiltersLabel})` : "Latest civic event listings",
         itemListOrder: "https://schema.org/ItemListOrderDescending",
         numberOfItems: protests.length,
         itemListElement: protests.slice(0, 25).map((p, idx) => ({
@@ -202,9 +226,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
         <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>
-              Find civic events near you
-            </h1>
+            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Find civic events near you</h1>
             <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
               Search by event name, city, state, or organizer. This platform is neutral and does not
               endorse or oppose any listing.
@@ -217,7 +239,6 @@ export default async function HomePage({ searchParams }: PageProps) {
           </nav>
         </header>
 
-        {/* HERO SEARCH */}
         <div style={{ marginTop: 18 }}>
           <HeroSearch />
         </div>
