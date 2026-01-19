@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
+import MainNav from "@/components/MainNav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,56 +14,81 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Local Assembly",
-  description: "Find and share public assemblies and civic actions.",
+  metadataBase: new URL("https://localassembly.org"),
+  title: {
+    default: "Local Assembly",
+    template: "%s — Local Assembly",
+  },
+  description: "A neutral, community-submitted directory of public assemblies and civic events.",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    url: "https://localassembly.org/",
+    siteName: "Local Assembly",
+    title: "Local Assembly",
+    description:
+      "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
+    images: [
+      {
+        url: "/images/home-hero.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Local Assembly — civic event listings",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Local Assembly",
+    description:
+      "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
+    images: ["/images/home-hero.jpg"],
+  },
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
-
-function MainNav() {
-  return (
-    <header className="border-b border-neutral-200">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Link
-          href="/"
-          className="text-sm font-semibold tracking-tight text-neutral-900"
-        >
-          Local Assembly
-        </Link>
-
-        <nav aria-label="Main navigation">
-          <ul className="flex items-center gap-4">
-            <li>
-              <Link
-                href="/"
-                className="text-sm text-neutral-700 hover:text-neutral-900"
-              >
-                Home
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/email-your-congressperson"
-                className="text-sm text-neutral-700 hover:text-neutral-900"
-              >
-                Email Your Congressperson
-              </Link>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    </header>
-  );
-}
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Site-wide JSON-LD (applies to all pages)
+  const siteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Local Assembly",
+    url: "https://localassembly.org/",
+    description:
+      "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: "https://localassembly.org/?q={search_term_string}",
+      "query-input": "required name=search_term_string",
+    },
+  };
+
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+        />
         <MainNav />
         {children}
       </body>
