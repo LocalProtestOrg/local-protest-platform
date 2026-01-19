@@ -37,6 +37,30 @@ const GLOBAL_ALT =
 
 const COMMENT_COOLDOWN_SECONDS = 20;
 
+const FALLBACK_LOCAL = "/images/fallback.jpg";
+const DEFAULT_LOCAL = "/images/default-protest.jpeg";
+
+function resolveImageSrc(image_path: string | null) {
+  if (!image_path) return DEFAULT_LOCAL;
+
+  const p = image_path.trim();
+  if (!p) return DEFAULT_LOCAL;
+
+  // Full remote URL already
+  if (p.startsWith("http://") || p.startsWith("https://")) return p;
+
+  // Local public file path already
+  if (p.startsWith("/")) return p;
+
+  // Legacy/local filenames stored in DB
+  if (p === "fallback.jpg") return FALLBACK_LOCAL;
+  if (p === "default-protest.jpeg") return DEFAULT_LOCAL;
+  if (p === "default-protest.jpg") return "/images/default-protest.jpg";
+
+  // Otherwise treat as Supabase Storage object path
+  return supabase.storage.from("protest-images").getPublicUrl(p).data.publicUrl;
+}
+
 function commentCooldownKey(protestId: string) {
   return `la:last_comment_ts:${protestId}`;
 }
@@ -361,12 +385,14 @@ export default function ProtestDetailPage() {
   const timeLine = protest.event_time ? new Date(protest.event_time).toLocaleString() : null;
   const headerSubtitle = timeLine ? `${locationLine} • ${timeLine}` : locationLine;
 
-  const baseUploadedImageUrl = protest.image_path
-    ? supabase.storage.from("protest-images").getPublicUrl(protest.image_path).data.publicUrl
-    : null;
+  // ✅ Use resolver for local/remote/storage
+  const baseImageUrl = resolveImageSrc(protest.image_path);
 
-  const uploadedImageUrl = baseUploadedImageUrl
-    ? `${baseUploadedImageUrl}?v=${encodeURIComponent(protest.image_path || "")}&t=${Date.now()}`
+  // Cache-bust only for storage URLs (nice-to-have); safe for local too
+  const imageUrl = baseImageUrl
+    ? `${baseImageUrl}${baseImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(
+        protest.image_path || ""
+      )}&t=${Date.now()}`
     : null;
 
   return (
@@ -402,9 +428,9 @@ export default function ProtestDetailPage() {
           </div>
         )}
 
-        {uploadedImageUrl && (
+        {imageUrl && (
           <img
-            src={uploadedImageUrl}
+            src={imageUrl}
             alt={GLOBAL_ALT}
             style={{
               width: "100%",
@@ -413,6 +439,12 @@ export default function ProtestDetailPage() {
               border: "1px solid #e5e5e5",
               background: "white",
               display: "block",
+            }}
+            onError={(e) => {
+              // Client-side fallback if something still breaks
+              const img = e.currentTarget;
+              if (img.src.endsWith(DEFAULT_LOCAL)) return;
+              img.src = DEFAULT_LOCAL;
             }}
           />
         )}
