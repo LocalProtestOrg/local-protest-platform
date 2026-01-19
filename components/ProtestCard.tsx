@@ -12,7 +12,7 @@ type Protest = {
   city?: string | null;
   state?: string | null;
   event_time?: string | null; // ISO string
-  image_path?: string | null;
+  image_path?: string | null; // may be undefined depending on select()
 };
 
 function formatLocation(city?: string | null, state?: string | null) {
@@ -23,7 +23,8 @@ function formatLocation(city?: string | null, state?: string | null) {
 }
 
 export default function ProtestCard({ protest }: { protest: Protest }) {
-  const imgSrc = getProtestImageSrc(protest.image_path);
+  // ✅ Fix: coerce undefined → null for TypeScript + runtime
+  const imgSrc = getProtestImageSrc(protest.image_path ?? null);
   const location = formatLocation(protest.city, protest.state);
 
   return (
@@ -38,9 +39,17 @@ export default function ProtestCard({ protest }: { protest: Protest }) {
           fill
           className="object-cover"
           sizes="(max-width: 768px) 100vw, 33vw"
-          // If your remotePatterns are correct, you can keep Next/Image optimization.
-          // If you still hit remote image issues, temporarily uncomment the next line:
+          // If remote images ever cause issues again, uncomment:
           // unoptimized
+          onError={(e) => {
+            // Final safety: if a URL 404s, switch to local fallback
+            // Note: Next/Image wraps img internally; this is a best-effort safeguard.
+            const target = e.target as HTMLImageElement | null;
+            if (!target) return;
+            if (!target.src.endsWith("/images/fallback.jpg")) {
+              target.src = "/images/fallback.jpg";
+            }
+          }}
         />
       </div>
 
