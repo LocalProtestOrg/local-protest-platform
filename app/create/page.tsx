@@ -1,15 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
 import { EVENT_TYPES, ACCESSIBILITY_FEATURES } from "@/lib/eventOptions";
-
-function toggleInList(list: string[], value: string) {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-}
 
 export default function CreatePage() {
   const router = useRouter();
@@ -22,13 +18,24 @@ export default function CreatePage() {
   const [eventTime, setEventTime] = useState(""); // ISO-ish from input
   const [msg, setMsg] = useState("");
 
-  // NEW: event types + accessibility
-  const [eventTypes, setEventTypes] = useState<string[]>([]);
+  // ✅ NEW: event type + accessibility
+  const [eventType, setEventType] = useState<string>(""); // single selection, stored as [eventType]
   const [isAccessible, setIsAccessible] = useState(false);
-  const [accessibilityFeatures, setAccessibilityFeatures] = useState<string[]>([]);
+  const [accessFeatures, setAccessFeatures] = useState<string[]>([]);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+
+  // If any accessibility feature is selected, force isAccessible true
+  useEffect(() => {
+    if (accessFeatures.length > 0) setIsAccessible(true);
+  }, [accessFeatures]);
+
+  const accessibilityHint = useMemo(() => {
+    if (!isAccessible) return "Mark this event accessible if accommodations are available.";
+    if (accessFeatures.length === 0) return "Select accessibility features below (recommended).";
+    return `${accessFeatures.length} accessibility feature(s) selected.`;
+  }, [isAccessible, accessFeatures.length]);
 
   useEffect(() => {
     (async () => {
@@ -52,6 +59,13 @@ export default function CreatePage() {
     })();
   }, [router]);
 
+  function toggleAccessFeature(feature: string) {
+    setAccessFeatures((prev) => {
+      if (prev.includes(feature)) return prev.filter((f) => f !== feature);
+      return [...prev, feature].sort((a, b) => a.localeCompare(b));
+    });
+  }
+
   async function createListing() {
     setMsg("");
 
@@ -65,15 +79,9 @@ export default function CreatePage() {
       return;
     }
 
-    // Optional: require at least one event type
-    if (eventTypes.length === 0) {
-      setMsg("Please select at least one event type.");
-      return;
-    }
-
-    // If user says accessible, require at least one feature (optional rule)
-    if (isAccessible && accessibilityFeatures.length === 0) {
-      setMsg("If the event is accessible, please select at least one accessibility feature.");
+    // Optional: require event type (recommended for future filters)
+    if (!eventType) {
+      setMsg("Please choose a type of event.");
       return;
     }
 
@@ -93,6 +101,12 @@ export default function CreatePage() {
 
     const event_time_value = eventTime ? new Date(eventTime).toISOString() : null;
 
+    // ✅ Store event_types as text[]; for now one selection -> [eventType]
+    const event_types_value = eventType ? [eventType] : [];
+
+    // ✅ accessibility_features should be an array (text[] or jsonb)
+    const accessibility_features_value = isAccessible ? accessFeatures : [];
+
     // 1) Create the protest row first
     const { data: created, error: createErr } = await supabase
       .from("protests")
@@ -105,10 +119,10 @@ export default function CreatePage() {
         state: stateVal.trim() || null,
         event_time: event_time_value,
 
-        // NEW FIELDS
-        event_types: eventTypes,
+        // ✅ NEW FIELDS
+        event_types: event_types_value,
         is_accessible: isAccessible,
-        accessibility_features: isAccessible ? accessibilityFeatures : [],
+        accessibility_features: accessibility_features_value,
       })
       .select("id")
       .single();
@@ -180,11 +194,7 @@ export default function CreatePage() {
         <h1 style={{ fontSize: 26, fontWeight: 900, marginTop: 16 }}>New Listing</h1>
 
         <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-          <input
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
 
           <textarea
             placeholder="Description (what, where to meet, what to bring, accessibility notes, etc.)"
@@ -193,12 +203,21 @@ export default function CreatePage() {
             rows={6}
           />
 
+          {/* ✅ NEW: Event Type */}
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ color: "#444", fontSize: 13 }}>Type of event</span>
+            <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+              <option value="">Select a type…</option>
+              {EVENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10 }}>
-            <input
-              placeholder="City"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            />
+            <input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
             <input
               placeholder="State"
               value={stateVal}
@@ -209,114 +228,72 @@ export default function CreatePage() {
 
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ color: "#444", fontSize: 13 }}>Event time (optional)</span>
-            <input
-              type="datetime-local"
-              value={eventTime}
-              onChange={(e) => setEventTime(e.target.value)}
-            />
+            <input type="datetime-local" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
           </label>
 
-          {/* EVENT TYPES */}
+          {/* ✅ NEW: Accessibility */}
           <section
             style={{
-              marginTop: 8,
-              padding: 14,
+              marginTop: 4,
+              padding: 12,
               border: "1px solid #e5e5e5",
               borderRadius: 12,
               background: "white",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Event types</h3>
-            <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
-              Select all that apply.
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 800 }}>Accessibility</div>
+                <div style={{ marginTop: 4, color: "#555", fontSize: 13 }}>{accessibilityHint}</div>
+              </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 10,
-                marginTop: 10,
-              }}
-            >
-              {EVENT_TYPES.map((t) => (
-                <label key={t} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <input
-                    type="checkbox"
-                    checked={eventTypes.includes(t)}
-                    onChange={() => setEventTypes((prev) => toggleInList(prev, t))}
-                  />
-                  <span>{t}</span>
-                </label>
-              ))}
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={isAccessible}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsAccessible(checked);
+                    if (!checked) setAccessFeatures([]);
+                  }}
+                />
+                <span style={{ fontSize: 13, color: "#333" }}>Accessible</span>
+              </label>
             </div>
 
-            <p style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
-              Selected: {eventTypes.length}
-            </p>
-          </section>
-
-          {/* ACCESSIBILITY */}
-          <section
-            style={{
-              marginTop: 6,
-              padding: 14,
-              border: "1px solid #e5e5e5",
-              borderRadius: 12,
-              background: "white",
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Accessibility</h3>
-
-            <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
-              <input
-                type="checkbox"
-                checked={isAccessible}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  setIsAccessible(next);
-                  if (!next) setAccessibilityFeatures([]);
-                }}
-              />
-              <span style={{ fontWeight: 700 }}>ADA / accessible accommodations available</span>
-            </label>
-
             {isAccessible && (
-              <>
-                <p style={{ marginTop: 10, color: "#555", fontSize: 13 }}>
-                  Select accessibility features available at this event.
-                </p>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                    gap: 10,
-                    marginTop: 10,
-                  }}
-                >
-                  {ACCESSIBILITY_FEATURES.map((f) => (
-                    <label key={f} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                      <input
-                        type="checkbox"
-                        checked={accessibilityFeatures.includes(f)}
-                        onChange={() =>
-                          setAccessibilityFeatures((prev) => toggleInList(prev, f))
-                        }
-                      />
-                      <span>{f}</span>
-                    </label>
-                  ))}
+              <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 13, color: "#444", fontWeight: 700 }}>
+                  Accessibility features (select all that apply)
                 </div>
 
-                <p style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
-                  Selected: {accessibilityFeatures.length}
-                </p>
-              </>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {ACCESSIBILITY_FEATURES.map((f) => {
+                    const checked = accessFeatures.includes(f);
+                    return (
+                      <label
+                        key={f}
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          padding: 8,
+                          borderRadius: 10,
+                          border: "1px solid #eee",
+                          background: checked ? "#f7f7ff" : "white",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input type="checkbox" checked={checked} onChange={() => toggleAccessFeature(f)} />
+                        <span style={{ fontSize: 13, color: "#333" }}>{f}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </section>
 
-          {/* IMAGE */}
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ color: "#444", fontSize: 13 }}>Cover image (optional)</span>
             <input

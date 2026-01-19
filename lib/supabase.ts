@@ -1,22 +1,40 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// These MUST be NEXT_PUBLIC for browser + Next build steps.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Don't throw at import-time in case a build step evaluates modules.
-// Instead, throw only when the client is actually used.
 function assertEnv() {
-  if (!supabaseUrl) throw new Error("supabaseUrl is required.");
-  if (!supabaseAnonKey) throw new Error("supabaseAnonKey is required.");
+  if (!supabaseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL is required.");
+  if (!supabaseAnonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is required.");
 }
 
-export const supabase = (() => {
+/**
+ * Browser + client-side usage:
+ * - Safe to import anywhere (does not throw on import)
+ * - Only throws if you call getSupabaseClient() without env
+ */
+let _client: SupabaseClient | null = null;
+
+export function getSupabaseClient() {
+  if (_client) return _client;
   assertEnv();
-  return createClient(supabaseUrl!, supabaseAnonKey!, {
+  _client = createClient(supabaseUrl!, supabaseAnonKey!, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
     },
   });
-})();
+  return _client;
+}
+
+// Backwards-compatible export for existing imports.
+// This still does NOT throw at import-time.
+export const supabase = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const client = getSupabaseClient() as any;
+      return client[prop];
+    },
+  }
+) as unknown as SupabaseClient;

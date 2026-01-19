@@ -19,14 +19,19 @@ type ProtestRow = {
   image_path: string | null;
   status: string | null;
 
-  // new fields (safe even if not used yet)
+  // Filters / new fields
   event_types: string[] | null;
   is_accessible: boolean | null;
   accessibility_features: string[] | null;
 };
 
 type PageProps = {
-  searchParams?: { q?: string };
+  searchParams?: {
+    q?: string;
+    types?: string; // comma-separated
+    accessible?: string; // "true" | "false"
+    features?: string; // comma-separated
+  };
 };
 
 // ✅ Homepage SEO (App Router)
@@ -58,10 +63,7 @@ export const metadata: Metadata = {
       "Search and browse community-submitted civic events across the U.S. Neutral platform; no endorsements.",
     images: ["https://localassembly.org/images/home-hero.jpg"],
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: { index: true, follow: true },
 };
 
 function stripHtml(s: string) {
@@ -74,8 +76,30 @@ function safeText(s: string, max = 200) {
   return t.slice(0, max - 1) + "…";
 }
 
+function parseCsvParam(v: string | undefined) {
+  if (!v) return [];
+  // split by comma, trim, drop empties, dedupe
+  const parts = v
+    .split(",")
+    .map((s) => decodeURIComponent(s).trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(parts));
+}
+
+function parseAccessibleParam(v: string | undefined): boolean | null {
+  if (!v) return null;
+  const t = v.trim().toLowerCase();
+  if (t === "true") return true;
+  if (t === "false") return false;
+  return null;
+}
+
 export default async function HomePage({ searchParams }: PageProps) {
   const q = (searchParams?.q ?? "").trim();
+  const types = parseCsvParam(searchParams?.types);
+  const features = parseCsvParam(searchParams?.features);
+  const accessible = parseAccessibleParam(searchParams?.accessible);
 
   let query = supabase
     .from("protests")
@@ -85,9 +109,9 @@ export default async function HomePage({ searchParams }: PageProps) {
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
-  // Simple server-side keyword search for now (filter module later)
+  // Keyword search (basic; filter module later)
   if (q) {
-    const escaped = q.replaceAll(",", " "); // keep or() string safe
+    const escaped = q.replaceAll(",", " "); // keep the `or()` string safe-ish
     query = query.or(
       [
         `title.ilike.%${escaped}%`,
@@ -99,10 +123,36 @@ export default async function HomePage({ searchParams }: PageProps) {
     );
   }
 
+  // ✅ Event types filter (text[])
+  if (types.length > 0) {
+    // Postgres array overlap: event_types && ARRAY[...]
+    query = query.overlaps("event_types", types);
+  }
+
+  // ✅ Accessible filter (boolean)
+  if (accessible !== null) {
+    query = query.eq("is_accessible", accessible);
+  }
+
+  // ✅ Accessibility features filter (text[])
+  if (features.length > 0) {
+    query = query.overlaps("accessibility_features", features);
+  }
+
   const { data, error } = await query;
   const protests = (data ?? []) as ProtestRow[];
 
-  // ✅ JSON-LD: WebSite + SearchAction + (optional) ItemList of latest results
+  // Label for results summary / JSON-LD ItemList
+  const appliedFiltersLabel = [
+    q ? `q="${q}"` : null,
+    types.length ? `types=${types.join("|")}` : null,
+    accessible !== null ? `accessible=${String(accessible)}` : null,
+    features.length ? `features=${features.join("|")}` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+  // ✅ JSON-LD: WebSite + SearchAction + ItemList
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -120,7 +170,9 @@ export default async function HomePage({ searchParams }: PageProps) {
       },
       {
         "@type": "ItemList",
-        name: q ? `Search results for "${q}"` : "Latest civic event listings",
+        name: appliedFiltersLabel
+          ? `Listings (${appliedFiltersLabel})`
+          : "Latest civic event listings",
         itemListOrder: "https://schema.org/ItemListOrderDescending",
         numberOfItems: protests.length,
         itemListElement: protests.slice(0, 25).map((p, idx) => ({
@@ -136,10 +188,8 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   return (
     <>
-      {/* JSON-LD for SEO */}
       <script
         type="application/ld+json"
-        // Next recommends dangerouslySetInnerHTML for JSON-LD
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
@@ -177,9 +227,9 @@ export default async function HomePage({ searchParams }: PageProps) {
         ) : null}
 
         <div style={{ marginTop: 14, color: "#555" }}>
-          {q ? (
+          {appliedFiltersLabel ? (
             <p style={{ margin: 0 }}>
-              Showing results for <strong>{q}</strong> ({protests.length})
+              Showing results ({protests.length}) • <span>{appliedFiltersLabel}</span>
             </p>
           ) : (
             <p style={{ margin: 0 }}>Showing latest listings ({protests.length})</p>
