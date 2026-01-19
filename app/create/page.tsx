@@ -5,6 +5,11 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
+import { EVENT_TYPES, ACCESSIBILITY_FEATURES } from "@/lib/eventOptions";
+
+function toggleInList(list: string[], value: string) {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
 
 export default function CreatePage() {
   const router = useRouter();
@@ -16,6 +21,11 @@ export default function CreatePage() {
   const [stateVal, setStateVal] = useState("");
   const [eventTime, setEventTime] = useState(""); // ISO-ish from input
   const [msg, setMsg] = useState("");
+
+  // NEW: event types + accessibility
+  const [eventTypes, setEventTypes] = useState<string[]>([]);
+  const [isAccessible, setIsAccessible] = useState(false);
+  const [accessibilityFeatures, setAccessibilityFeatures] = useState<string[]>([]);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
@@ -43,97 +53,113 @@ export default function CreatePage() {
   }, [router]);
 
   async function createListing() {
-  setMsg("");
+    setMsg("");
 
-  if (!title.trim() || !description.trim()) {
-    setMsg("Title and description are required.");
-    return;
-  }
-
-  if (!userId) {
-    setMsg("You must be logged in.");
-    return;
-  }
-
-  // Simple client-side image checks (recommended)
-  if (imageFile) {
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(imageFile.type)) {
-      setMsg("Image must be a JPG, PNG, or WEBP file.");
-      return;
-    }
-    const maxBytes = 5 * 1024 * 1024; // 5MB
-    if (imageFile.size > maxBytes) {
-      setMsg("Image is too large (max 5MB).");
-      return;
-    }
-  }
-
-  const event_time_value = eventTime ? new Date(eventTime).toISOString() : null;
-
-  // 1) Create the protest row first
-  const { data: created, error: createErr } = await supabase
-    .from("protests")
-    .insert({
-      user_id: userId,
-      organizer_username: username ?? "unknown",
-      title: title.trim(),
-      description: description.trim(),
-      city: city.trim() || null,
-      state: stateVal.trim() || null,
-      event_time: event_time_value,
-    })
-    .select("id")
-    .single();
-
-  if (createErr) {
-    setMsg(createErr.message);
-    return;
-  }
-
-  const protestId = (created as any)?.id as string;
-
-  // 2) Upload image (optional)
-  if (imageFile) {
-    const ext =
-      imageFile.type === "image/png"
-        ? "png"
-        : imageFile.type === "image/webp"
-        ? "webp"
-        : "jpg";
-
-    const filePath = `protests/${protestId}/cover.${ext}`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from("protest-images")
-      .upload(filePath, imageFile, {
-        upsert: true,
-        cacheControl: "3600",
-        contentType: imageFile.type,
-      });
-
-    if (uploadErr) {
-      setMsg("Listing created, but image upload failed: " + uploadErr.message);
-      router.push("/protest/" + protestId);
+    if (!title.trim() || !description.trim()) {
+      setMsg("Title and description are required.");
       return;
     }
 
-    // 3) Save image path on the protest row
-    const { error: updateErr } = await supabase
+    if (!userId) {
+      setMsg("You must be logged in.");
+      return;
+    }
+
+    // Optional: require at least one event type
+    if (eventTypes.length === 0) {
+      setMsg("Please select at least one event type.");
+      return;
+    }
+
+    // If user says accessible, require at least one feature (optional rule)
+    if (isAccessible && accessibilityFeatures.length === 0) {
+      setMsg("If the event is accessible, please select at least one accessibility feature.");
+      return;
+    }
+
+    // Simple client-side image checks (recommended)
+    if (imageFile) {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowed.includes(imageFile.type)) {
+        setMsg("Image must be a JPG, PNG, or WEBP file.");
+        return;
+      }
+      const maxBytes = 5 * 1024 * 1024; // 5MB
+      if (imageFile.size > maxBytes) {
+        setMsg("Image is too large (max 5MB).");
+        return;
+      }
+    }
+
+    const event_time_value = eventTime ? new Date(eventTime).toISOString() : null;
+
+    // 1) Create the protest row first
+    const { data: created, error: createErr } = await supabase
       .from("protests")
-      .update({ image_path: filePath })
-      .eq("id", protestId);
+      .insert({
+        user_id: userId,
+        organizer_username: username ?? "unknown",
+        title: title.trim(),
+        description: description.trim(),
+        city: city.trim() || null,
+        state: stateVal.trim() || null,
+        event_time: event_time_value,
 
-    if (updateErr) {
-      setMsg("Listing created, but saving image path failed: " + updateErr.message);
-      router.push("/protest/" + protestId);
+        // NEW FIELDS
+        event_types: eventTypes,
+        is_accessible: isAccessible,
+        accessibility_features: isAccessible ? accessibilityFeatures : [],
+      })
+      .select("id")
+      .single();
+
+    if (createErr) {
+      setMsg(createErr.message);
       return;
     }
+
+    const protestId = (created as any)?.id as string;
+
+    // 2) Upload image (optional)
+    if (imageFile) {
+      const ext =
+        imageFile.type === "image/png"
+          ? "png"
+          : imageFile.type === "image/webp"
+          ? "webp"
+          : "jpg";
+
+      const filePath = `protests/${protestId}/cover.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("protest-images")
+        .upload(filePath, imageFile, {
+          upsert: true,
+          cacheControl: "3600",
+          contentType: imageFile.type,
+        });
+
+      if (uploadErr) {
+        setMsg("Listing created, but image upload failed: " + uploadErr.message);
+        router.push("/protest/" + protestId);
+        return;
+      }
+
+      // 3) Save image path on the protest row
+      const { error: updateErr } = await supabase
+        .from("protests")
+        .update({ image_path: filePath })
+        .eq("id", protestId);
+
+      if (updateErr) {
+        setMsg("Listing created, but saving image path failed: " + updateErr.message);
+        router.push("/protest/" + protestId);
+        return;
+      }
+    }
+
+    router.push("/protest/" + protestId);
   }
-
-  router.push("/protest/" + protestId);
-}
-
 
   return (
     <>
@@ -189,14 +215,116 @@ export default function CreatePage() {
               onChange={(e) => setEventTime(e.target.value)}
             />
           </label>
-<label style={{ display: "grid", gap: 6 }}>
-  <span style={{ color: "#444", fontSize: 13 }}>Cover image (optional)</span>
-  <input
-    type="file"
-    accept="image/png,image/jpeg,image/webp"
-    onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-  />
-</label>
+
+          {/* EVENT TYPES */}
+          <section
+            style={{
+              marginTop: 8,
+              padding: 14,
+              border: "1px solid #e5e5e5",
+              borderRadius: 12,
+              background: "white",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Event types</h3>
+            <p style={{ marginTop: 8, color: "#555", fontSize: 13 }}>
+              Select all that apply.
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 10,
+                marginTop: 10,
+              }}
+            >
+              {EVENT_TYPES.map((t) => (
+                <label key={t} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <input
+                    type="checkbox"
+                    checked={eventTypes.includes(t)}
+                    onChange={() => setEventTypes((prev) => toggleInList(prev, t))}
+                  />
+                  <span>{t}</span>
+                </label>
+              ))}
+            </div>
+
+            <p style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
+              Selected: {eventTypes.length}
+            </p>
+          </section>
+
+          {/* ACCESSIBILITY */}
+          <section
+            style={{
+              marginTop: 6,
+              padding: 14,
+              border: "1px solid #e5e5e5",
+              borderRadius: 12,
+              background: "white",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Accessibility</h3>
+
+            <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
+              <input
+                type="checkbox"
+                checked={isAccessible}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setIsAccessible(next);
+                  if (!next) setAccessibilityFeatures([]);
+                }}
+              />
+              <span style={{ fontWeight: 700 }}>ADA / accessible accommodations available</span>
+            </label>
+
+            {isAccessible && (
+              <>
+                <p style={{ marginTop: 10, color: "#555", fontSize: 13 }}>
+                  Select accessibility features available at this event.
+                </p>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gap: 10,
+                    marginTop: 10,
+                  }}
+                >
+                  {ACCESSIBILITY_FEATURES.map((f) => (
+                    <label key={f} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <input
+                        type="checkbox"
+                        checked={accessibilityFeatures.includes(f)}
+                        onChange={() =>
+                          setAccessibilityFeatures((prev) => toggleInList(prev, f))
+                        }
+                      />
+                      <span>{f}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <p style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
+                  Selected: {accessibilityFeatures.length}
+                </p>
+              </>
+            )}
+          </section>
+
+          {/* IMAGE */}
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ color: "#444", fontSize: 13 }}>Cover image (optional)</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
 
           <button onClick={createListing} style={{ marginTop: 6 }}>
             Publish listing
