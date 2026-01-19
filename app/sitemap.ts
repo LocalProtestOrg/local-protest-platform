@@ -1,18 +1,11 @@
 import type { MetadataRoute } from "next";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
-export const revalidate = 3600; // rebuild sitemap at most once per hour
+export const revalidate = 3600;
 
 const BASE_URL = "https://localassembly.org";
 
-type ProtestRow = {
-  id: string;
-  updated_at?: string | null;
-  created_at?: string | null;
-};
-
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Static routes
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: `${BASE_URL}/`,
@@ -38,29 +31,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "yearly",
       priority: 0.2,
     },
-    // Optional: usually NO for SEO (admin pages shouldn’t be indexed)
-    // If you want it excluded, leave it out here and we’ll block it in robots.ts
-    // {
-    //   url: `${BASE_URL}/admin`,
-    //   lastModified: new Date(),
-    //   changeFrequency: "weekly",
-    //   priority: 0.1,
-    // },
   ];
 
-  // Dynamic event routes
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // If env isn't present during build, do NOT crash.
+  if (!url || !anon) return staticRoutes;
+
+  const supabase = createClient(url, anon);
+
   const { data, error } = await supabase
     .from("protests")
     .select("id,created_at")
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    // Fallback to static routes if DB fails (don’t crash build)
-    return staticRoutes;
-  }
+  if (error) return staticRoutes;
 
-  const dynamicRoutes: MetadataRoute.Sitemap = (data ?? []).map((p: ProtestRow) => ({
+  const dynamicRoutes: MetadataRoute.Sitemap = (data ?? []).map((p: any) => ({
     url: `${BASE_URL}/protest/${p.id}`,
     lastModified: p.created_at ? new Date(p.created_at) : new Date(),
     changeFrequency: "weekly",
