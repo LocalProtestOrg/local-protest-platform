@@ -37,30 +37,31 @@ const GLOBAL_ALT =
 
 const COMMENT_COOLDOWN_SECONDS = 20;
 
+// Local public fallbacks (confirmed working on your site)
 const FALLBACK_LOCAL = "/images/fallback.jpg";
 const DEFAULT_LOCAL = "/images/default-protest.jpeg";
 
+/**
+ * Resolve image_path into a real <img src>.
+ * Supports:
+ *  - Full URLs: https://...
+ *  - Local public paths: /images/...
+ *  - Relative local paths stored in DB: images/fallback.jpg -> /images/fallback.jpg
+ *  - Legacy filenames stored in DB: fallback.jpg -> /images/fallback.jpg
+ *  - Supabase Storage object paths: protests/<id>/cover.jpg -> getPublicUrl(...)
+ */
 function resolveImageSrc(image_path: string | null) {
-  if (!image_path) return DEFAULT_LOCAL;
-
-  const p = image_path.trim();
+  const p = (image_path ?? "").trim();
   if (!p) return DEFAULT_LOCAL;
 
-  // Full remote URL already
   if (p.startsWith("http://") || p.startsWith("https://")) return p;
+  if (p.startsWith("/")) return p;
+  if (p.startsWith("images/")) return "/" + p;
 
-  // Local public file path already
-  if (p.startsWith("http://") || p.startsWith("https://")) return p;
-if (p.startsWith("/")) return p;
-if (p.startsWith("images/")) return "/" + p;
-
-
-  // Legacy/local filenames stored in DB
   if (p === "fallback.jpg") return FALLBACK_LOCAL;
   if (p === "default-protest.jpeg") return DEFAULT_LOCAL;
   if (p === "default-protest.jpg") return "/images/default-protest.jpg";
 
-  // Otherwise treat as Supabase Storage object path
   return supabase.storage.from("protest-images").getPublicUrl(p).data.publicUrl;
 }
 
@@ -388,10 +389,10 @@ export default function ProtestDetailPage() {
   const timeLine = protest.event_time ? new Date(protest.event_time).toLocaleString() : null;
   const headerSubtitle = timeLine ? `${locationLine} • ${timeLine}` : locationLine;
 
-  // ✅ Use resolver for local/remote/storage
+  // ✅ Resolve to local/remote/storage URL
   const baseImageUrl = resolveImageSrc(protest.image_path);
 
-  // Cache-bust only for storage URLs (nice-to-have); safe for local too
+  // Cache-bust so freshly uploaded covers show up
   const imageUrl = baseImageUrl
     ? `${baseImageUrl}${baseImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(
         protest.image_path || ""
@@ -444,8 +445,8 @@ export default function ProtestDetailPage() {
               display: "block",
             }}
             onError={(e) => {
-              // Client-side fallback if something still breaks
               const img = e.currentTarget;
+              // Final safety: if anything fails, show local default
               if (img.src.endsWith(DEFAULT_LOCAL)) return;
               img.src = DEFAULT_LOCAL;
             }}
@@ -607,7 +608,9 @@ export default function ProtestDetailPage() {
                         background: "white",
                       }}
                     >
-                      <p style={{ fontWeight: 700, margin: 0 }}>{c.author_name} (hidden)</p>
+                      <p style={{ fontWeight: 700, margin: 0 }}>
+                        {c.author_name} (hidden)
+                      </p>
                       <p style={{ marginTop: 6 }}>{c.body}</p>
 
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
