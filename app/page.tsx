@@ -29,7 +29,6 @@ type ProtestRow = {
 };
 
 type PageProps = {
-  // Next 16: treat searchParams as Promise
   searchParams?: Promise<{
     q?: string;
     types?: string; // comma-separated
@@ -38,7 +37,6 @@ type PageProps = {
   }>;
 };
 
-// Homepage SEO (App Router)
 export const metadata: Metadata = {
   title: "Local Assembly - Find Protests, Rallies, Town Halls & Civic Events Near You",
   description:
@@ -97,12 +95,10 @@ function parseAccessibleParam(v: string | undefined): boolean | null {
   return null;
 }
 
-// Escapes % and _ so ilike does not treat them as wildcards from user input
 function escapeIlike(input: string) {
   return input.replace(/[%_]/g, "\\$&");
 }
 
-// If someone searches "Houston, TX" or "Houston TX", treat it as city/state filter
 function parseCityState(q: string): { city?: string; state?: string } {
   const raw = q.trim();
   if (!raw) return {};
@@ -139,12 +135,10 @@ export default async function HomePage({ searchParams }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(HOME_EVENTS_LIMIT);
 
-  // Filters
   if (types.length > 0) query = query.overlaps("event_types", types);
   if (accessible !== null) query = query.eq("is_accessible", accessible);
   if (features.length > 0) query = query.overlaps("accessibility_features", features);
 
-  // Search behavior
   if (q) {
     const { city, state } = parseCityState(q);
 
@@ -184,7 +178,8 @@ export default async function HomePage({ searchParams }: PageProps) {
         "@type": "WebSite",
         name: "Local Assembly",
         url: "https://localassembly.org/",
-        description: "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
+        description:
+          "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
         potentialAction: {
           "@type": "SearchAction",
           target: "https://localassembly.org/?q={search_term_string}",
@@ -220,45 +215,39 @@ export default async function HomePage({ searchParams }: PageProps) {
         imageUrl="/images/home-hero.jpg"
       />
 
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-        {/* Removed the header nav here so the ONLY nav is the PageHeader dropdown */}
+      <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
         <header>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Find civic events near you</h1>
-          <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
+          <h1 className="m-0 text-[26px] font-black md:text-[28px]">
+            Find civic events near you
+          </h1>
+          <p className="mt-2 max-w-[760px] text-sm text-neutral-700 md:text-base">
             Search by event name, city, state, or organizer. This platform is neutral and does not
             endorse or oppose any listing.
           </p>
         </header>
 
-        <div style={{ marginTop: 18 }}>
+        <div className="mt-4">
           <HeroSearch />
         </div>
 
         {error ? (
-          <p style={{ marginTop: 16, color: "crimson" }}>Database error: {error.message}</p>
+          <p className="mt-4 text-sm text-red-700">Database error: {error.message}</p>
         ) : null}
 
-        <div style={{ marginTop: 14, color: "#555" }}>
+        <div className="mt-4 text-sm text-neutral-600">
           {appliedFiltersLabel ? (
-            <p style={{ margin: 0 }}>
+            <p className="m-0">
               Showing results ({protests.length}) • <span>{appliedFiltersLabel}</span>
             </p>
           ) : (
-            <p style={{ margin: 0 }}>Showing latest listings ({protests.length})</p>
+            <p className="m-0">Showing latest listings ({protests.length})</p>
           )}
         </div>
 
-        {/* Grid: 3 across, 2 rows total because we limit to 6 */}
-        <section
-          style={{
-            marginTop: 16,
-            display: "grid",
-            gap: 14,
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          }}
-        >
+        {/* Mobile: 1 column (stacked). Desktop: 3 columns (your current design). */}
+        <section className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           {protests.length === 0 ? (
-            <p style={{ gridColumn: "1 / -1" }}>No listings found.</p>
+            <p className="md:col-span-3">No listings found.</p>
           ) : (
             protests.map((p) => (
               <ProtestCard
@@ -278,42 +267,23 @@ export default async function HomePage({ searchParams }: PageProps) {
         </section>
 
         {/* Buttons under the grid */}
-        <div style={{ marginTop: 20, display: "grid", gap: 12, justifyItems: "center" }}>
+        <div className="mt-6 grid gap-3 justify-items-center">
           <Link
             href="/events"
-            style={{
-              display: "inline-block",
-              padding: "12px 18px",
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.18)",
-              background: "white",
-              color: "black",
-              fontWeight: 800,
-              textDecoration: "none",
-            }}
+            className="inline-block rounded-xl border border-black/20 bg-white px-5 py-3 font-extrabold text-black no-underline"
           >
-            View More Events
+            See All Events
           </Link>
 
           <a
             href="https://www.localassembly.org/email-your-congressperson"
-            style={{
-              display: "inline-block",
-              padding: "12px 18px",
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.18)",
-              background: "red",
-              color: "white",
-              fontWeight: 900,
-              textDecoration: "none",
-              textAlign: "center",
-            }}
+            className="inline-block rounded-xl border border-black/20 bg-red-600 px-5 py-3 text-center font-black text-white no-underline"
           >
             Email Your Congressperson
           </a>
         </div>
 
-        <footer style={{ marginTop: 32, color: "#666", fontSize: 13 }}>
+        <footer className="mt-8 text-xs text-neutral-600">
           Community note: Comments are public. The organizer moderates comments for each listing.
         </footer>
       </main>
