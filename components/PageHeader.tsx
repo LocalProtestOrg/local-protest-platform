@@ -1,41 +1,56 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+
+type PageHeaderProps = {
+  title: string;
+  subtitle?: string;
+  imageUrl: string;
+  showText?: boolean; // optional, default true
+};
+
+const DEFAULT_ALT = "Peaceful protest gathering around the nation unite for a common cause.";
 
 export default function PageHeader({
   title,
   subtitle,
   imageUrl,
-}: {
-  title: string;
-  subtitle?: string;
-  imageUrl: string;
-}) {
-  const ALT_TEXT =
-    "Peaceful protest gathering around the nation unite for a common cause.";
-
+  showText = true,
+}: PageHeaderProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // Close menu when clicking outside
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+    function onDocClick(e: MouseEvent) {
+      if (!open) return;
+      const target = e.target as Node | null;
+      if (menuRef.current && target && !menuRef.current.contains(target)) {
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  const ariaLabel = DEFAULT_ALT;
 
   return (
     <section
-      aria-label={ALT_TEXT}
+      aria-label={ariaLabel}
       style={{
         width: "100%",
         height: 280,
-        backgroundColor: "#d9d9d9", // fallback if image fails
+        backgroundColor: "#d9d9d9",
         backgroundImage: `url("${imageUrl}")`,
         backgroundRepeat: "no-repeat",
         backgroundSize: "cover",
@@ -43,10 +58,10 @@ export default function PageHeader({
         position: "relative",
       }}
     >
-      {/* Accessible alt text for screen readers */}
+      {/* Hidden image for accessibility */}
       <img
         src={imageUrl}
-        alt={ALT_TEXT}
+        alt={ariaLabel}
         style={{
           position: "absolute",
           width: 1,
@@ -58,7 +73,7 @@ export default function PageHeader({
         }}
       />
 
-      {/* Dark overlay (visual only) */}
+      {/* Dark overlay */}
       <div
         style={{
           position: "absolute",
@@ -68,7 +83,7 @@ export default function PageHeader({
         }}
       />
 
-      {/* Dropdown Menu (top-right) */}
+      {/* Dropdown menu */}
       <div
         ref={menuRef}
         style={{
@@ -79,9 +94,10 @@ export default function PageHeader({
         }}
       >
         <button
-          onClick={() => setOpen((v) => !v)}
+          type="button"
           aria-haspopup="true"
           aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
           style={{
             padding: "10px 14px",
             borderRadius: 10,
@@ -97,34 +113,35 @@ export default function PageHeader({
 
         {open ? (
           <div
+            role="menu"
+            aria-label="Site menu"
             style={{
-              position: "absolute",
-              right: 0,
-              top: "110%",
-              minWidth: 280,
+              marginTop: 10,
+              minWidth: 220,
               background: "white",
-              color: "black",
               borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.15)",
-              boxShadow: "0 10px 25px rgba(0,0,0,0.18)",
+              border: "1px solid rgba(0,0,0,0.14)",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
               overflow: "hidden",
-              zIndex: 999,
             }}
           >
-            <MenuItem href="/login" label="Login" onSelect={() => setOpen(false)} />
-            <MenuItem
-              href="https://www.localassembly.org/email-your-congressperson"
-              label="Email Your Congressperson"
-              onSelect={() => setOpen(false)}
-              external
-            />
-            <MenuItem href="/create" label="Create Event" onSelect={() => setOpen(false)} />
-            <MenuItem href="/know-your-rights" label="Know Your Rights" onSelect={() => setOpen(false)} />
+            <MenuItem href="/login" onPick={() => setOpen(false)}>
+              Login
+            </MenuItem>
+            <MenuItem href="/email-your-congressperson" onPick={() => setOpen(false)}>
+              Email Your Congressperson
+            </MenuItem>
+            <MenuItem href="/create" onPick={() => setOpen(false)}>
+              Create Event
+            </MenuItem>
+            <MenuItem href="/know-your-rights" onPick={() => setOpen(false)}>
+              Know Your Rights
+            </MenuItem>
           </div>
         ) : null}
       </div>
 
-      {/* Content */}
+      {/* Hero text */}
       <div
         style={{
           position: "relative",
@@ -134,28 +151,17 @@ export default function PageHeader({
           alignItems: "center",
         }}
       >
-        <div
-          style={{
-            maxWidth: 900,
-            margin: "0 auto",
-            padding: 24,
-            color: "white",
-          }}
-        >
-          <h1 style={{ fontSize: 38, fontWeight: 800, margin: 0 }}>{title}</h1>
-
-          {subtitle && (
-            <p
-              style={{
-                fontSize: 18,
-                marginTop: 10,
-                maxWidth: 700,
-                lineHeight: 1.4,
-              }}
-            >
-              {subtitle}
-            </p>
-          )}
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: 24, color: "white" }}>
+          {showText ? (
+            <>
+              <h1 style={{ fontSize: 38, fontWeight: 800, margin: 0 }}>{title}</h1>
+              {subtitle ? (
+                <p style={{ fontSize: 18, marginTop: 10, maxWidth: 700, lineHeight: 1.4 }}>
+                  {subtitle}
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
     </section>
@@ -164,42 +170,28 @@ export default function PageHeader({
 
 function MenuItem({
   href,
-  label,
-  onSelect,
-  external,
+  children,
+  onPick,
 }: {
   href: string;
-  label: string;
-  onSelect: () => void;
-  external?: boolean;
+  children: React.ReactNode;
+  onPick: () => void;
 }) {
-  const itemStyle: React.CSSProperties = {
-    display: "block",
-    padding: "12px 16px",
-    fontWeight: 700,
-    textDecoration: "none",
-    color: "black",
-  };
-
-  if (external) {
-    return (
-      <a
-        href={href}
-        onClick={onSelect}
-        style={itemStyle}
-      >
-        {label}
-      </a>
-    );
-  }
-
   return (
     <Link
       href={href}
-      onClick={onSelect}
-      style={itemStyle}
+      role="menuitem"
+      onClick={onPick}
+      style={{
+        display: "block",
+        padding: "12px 14px",
+        textDecoration: "none",
+        color: "#111",
+        fontWeight: 700,
+        borderBottom: "1px solid rgba(0,0,0,0.06)",
+      }}
     >
-      {label}
+      {children}
     </Link>
   );
 }
