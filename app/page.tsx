@@ -29,16 +29,14 @@ type ProtestRow = {
 };
 
 type PageProps = {
-  // Next 16: treat searchParams as Promise
   searchParams?: Promise<{
     q?: string;
-    types?: string; // comma-separated
-    accessible?: string; // "true" | "false"
-    features?: string; // comma-separated
+    types?: string;
+    accessible?: string;
+    features?: string;
   }>;
 };
 
-// Homepage SEO (App Router)
 export const metadata: Metadata = {
   title: "Local Assembly - Find Protests, Rallies, Town Halls & Civic Events Near You",
   description:
@@ -97,12 +95,10 @@ function parseAccessibleParam(v: string | undefined): boolean | null {
   return null;
 }
 
-// Escapes % and _ so ilike does not treat them as wildcards from user input
 function escapeIlike(input: string) {
   return input.replace(/[%_]/g, "\\$&");
 }
 
-// If someone searches "Houston, TX" or "Houston TX", treat it as city/state filter
 function parseCityState(q: string): { city?: string; state?: string } {
   const raw = q.trim();
   if (!raw) return {};
@@ -121,7 +117,6 @@ function parseCityState(q: string): { city?: string; state?: string } {
 }
 
 export default async function HomePage({ searchParams }: PageProps) {
-  // stop Next from caching this render
   noStore();
 
   const sp = (await searchParams) ?? {};
@@ -140,12 +135,10 @@ export default async function HomePage({ searchParams }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(HOME_EVENTS_LIMIT);
 
-  // Filters
   if (types.length > 0) query = query.overlaps("event_types", types);
   if (accessible !== null) query = query.eq("is_accessible", accessible);
   if (features.length > 0) query = query.overlaps("accessibility_features", features);
 
-  // Search behavior
   if (q) {
     const { city, state } = parseCityState(q);
 
@@ -225,21 +218,14 @@ export default async function HomePage({ searchParams }: PageProps) {
       />
 
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-        <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>
-              Find civic events near you
-            </h1>
-            <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
-              Search by event name, city, state, or organizer. This platform is neutral and does not
-              endorse or oppose any listing.
-            </p>
-          </div>
-
-          <nav style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <Link href="/create">Create</Link>
-            <Link href="/login">Login</Link>
-          </nav>
+        <header>
+          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>
+            Find civic events near you
+          </h1>
+          <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
+            Search by event name, city, state, or organizer. This platform is neutral and does not
+            endorse or oppose any listing.
+          </p>
         </header>
 
         <div style={{ marginTop: 18 }}>
@@ -260,7 +246,6 @@ export default async function HomePage({ searchParams }: PageProps) {
           )}
         </div>
 
-        {/* Grid: 3 across, 2 rows total because we limit to 6 */}
         <section
           style={{
             marginTop: 16,
@@ -289,7 +274,6 @@ export default async function HomePage({ searchParams }: PageProps) {
           )}
         </section>
 
-        {/* Buttons under the grid */}
         <div style={{ marginTop: 20, display: "grid", gap: 12, justifyItems: "center" }}>
           <Link
             href="/events"

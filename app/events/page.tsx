@@ -29,7 +29,7 @@ type ProtestRow = {
 
 type PageProps = {
   searchParams?: Promise<{
-    page?: string; // "1", "2", ...
+    page?: string;
   }>;
 };
 
@@ -80,18 +80,11 @@ export default async function EventsPage({ searchParams }: PageProps) {
       />
 
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-        <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>All events</h1>
-            <p style={{ marginTop: 8, color: "#444" }}>
-              Page {page} of {totalPages}
-            </p>
-          </div>
-
-          <nav style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <Link href="/">Home</Link>
-            <Link href="/create">Create</Link>
-          </nav>
+        <header>
+          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>All events</h1>
+          <p style={{ marginTop: 8, color: "#444" }}>
+            Page {page} of {totalPages}
+          </p>
         </header>
 
         {error ? (
