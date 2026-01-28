@@ -84,6 +84,7 @@ export default function KnowYourRightsPage() {
         title="Know Your Rights"
         subtitle="Clear, practical information for participating in civic life"
         imageUrl="/images/home-hero.jpg"
+        showText={false}
       />
 
       <main style={{ maxWidth: 820, margin: "0 auto", padding: 24 }}>
@@ -118,18 +119,20 @@ export default function KnowYourRightsPage() {
                 You generally have the right to <strong>peacefully assemble</strong> in public spaces.
               </li>
               <li style={styles.li}>
-                Permits may be required for <strong>street closures, amplified sound, large structures</strong>, or
-                certain public venues.
+                Permits may be required for{" "}
+                <strong>street closures, amplified sound, large structures</strong>, or certain public
+                venues.
               </li>
               <li style={styles.li}>
                 You can often <strong>record in public</strong> if you do not interfere with officials.
               </li>
               <li style={styles.li}>
-                If questioned, you can ask: <strong>&quot;Am I free to leave?&quot;</strong> If detained, you can
-                remain silent and request an attorney.
+                If questioned, you can ask: <strong>&quot;Am I free to leave?&quot;</strong> If
+                detained, you can remain silent and request an attorney.
               </li>
               <li style={styles.li}>
-                Accessibility information helps more people participate. If you know it, include it in the listing.
+                Accessibility information helps more people participate. If you know it, include it
+                in the listing.
               </li>
             </ul>
           </div>
@@ -137,8 +140,8 @@ export default function KnowYourRightsPage() {
           <div style={styles.card}>
             <h2 style={styles.h2}>Your Right to Peaceful Assembly</h2>
             <p style={styles.p}>
-              The First Amendment protects the right of people to gather peacefully and express views in many public
-              spaces, such as sidewalks, parks, and plazas.
+              The First Amendment protects the right of people to gather peacefully and express views
+              in many public spaces, such as sidewalks, parks, and plazas.
             </p>
             <ul style={styles.ul}>
               <li style={styles.li}>Gather peacefully in public places</li>
@@ -158,8 +161,8 @@ export default function KnowYourRightsPage() {
               <li style={styles.li}>Include large crowds, stages, tents, or structures</li>
             </ul>
             <p style={{ ...styles.note, marginTop: 10 }}>
-              Permit requirements typically apply to organizers, not individual attendees. A permit requirement does not
-              automatically mean an event is unlawful.
+              Permit requirements typically apply to organizers, not individual attendees. A permit
+              requirement does not automatically mean an event is unlawful.
             </p>
           </div>
 
@@ -189,7 +192,8 @@ export default function KnowYourRightsPage() {
           <div style={styles.card}>
             <h2 style={styles.h2}>If You Are Asked to Disperse</h2>
             <p style={styles.p}>
-              Authorities may issue a lawful order to disperse if a gathering is deemed unsafe or unlawful.
+              Authorities may issue a lawful order to disperse if a gathering is deemed unsafe or
+              unlawful.
             </p>
             <ul style={styles.ul}>
               <li style={styles.li}>Listen carefully to instructions</li>
@@ -201,8 +205,8 @@ export default function KnowYourRightsPage() {
           <div style={styles.card}>
             <h2 style={styles.h2}>Your Rights as an Observer</h2>
             <p style={styles.p}>
-              You do not need special credentials to observe or record public events. You can usually document what you
-              see in public spaces, as long as you do not interfere.
+              You do not need special credentials to observe or record public events. You can usually
+              document what you see in public spaces, as long as you do not interfere.
             </p>
             <ul style={styles.ul}>
               <li style={styles.li}>Photography and video recording are generally allowed in public places</li>
@@ -240,8 +244,9 @@ export default function KnowYourRightsPage() {
           <div style={styles.card}>
             <h2 style={styles.h2}>Know Your Local Laws</h2>
             <p style={styles.p}>
-              State and local rules can differ for curfews, noise limits, march routes, and public space regulations.
-              Before attending or organizing an event, review local guidelines when possible.
+              State and local rules can differ for curfews, noise limits, march routes, and public
+              space regulations. Before attending or organizing an event, review local guidelines when
+              possible.
             </p>
             <p style={{ ...styles.note, marginTop: 10 }}>
               If you want to contact your representatives, use{" "}
@@ -258,11 +263,12 @@ export default function KnowYourRightsPage() {
           <div style={styles.card}>
             <h2 style={styles.h2}>Our Commitment</h2>
             <p style={styles.p}>
-              Local Assembly provides a platform for discovering civic events. We do not organize, endorse, or promote any
-              specific cause.
+              Local Assembly provides a platform for discovering civic events. We do not organize,
+              endorse, or promote any specific cause.
             </p>
             <p style={{ ...styles.p, marginTop: 10 }}>
-              Our goal is to support informed participation, public safety, accessibility, and transparency.
+              Our goal is to support informed participation, public safety, accessibility, and
+              transparency.
             </p>
           </div>
 
@@ -270,7 +276,8 @@ export default function KnowYourRightsPage() {
           <div style={styles.card}>
             <h2 style={styles.h2}>FAQ</h2>
             <p style={styles.note}>
-              These answers are general. Local rules vary. If you need legal advice, consult a qualified professional.
+              These answers are general. Local rules vary. If you need legal advice, consult a
+              qualified professional.
             </p>
 
             <div style={styles.divider} />
