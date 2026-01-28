@@ -45,6 +45,10 @@ function safeFileName(name: string) {
   return name.replace(/[^\w.\-]+/g, "_");
 }
 
+function toggleArrayValue(arr: string[], value: string) {
+  return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
+}
+
 export default function CreateProtestForm() {
   const router = useRouter();
 
@@ -72,10 +76,6 @@ export default function CreateProtestForm() {
     if (!normalizeStateCode(form.state)) return false;
     return true;
   }, [busy, form]);
-
-  function toggleArrayValue(arr: string[], value: string) {
-    return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
-  }
 
   async function ensureLoggedIn() {
     const { data } = await supabase.auth.getSession();
@@ -106,12 +106,10 @@ export default function CreateProtestForm() {
         return;
       }
 
-      // Organizer username: try user metadata, otherwise a fallback
       const organizer_username =
         (user.user_metadata?.username as string | undefined) ||
         (user.email ? user.email.split("@")[0] : null);
 
-      // Insert first to get an id
       const { data: inserted, error: insertErr } = await supabase
         .from("protests")
         .insert({
@@ -125,9 +123,7 @@ export default function CreateProtestForm() {
           status: "active",
           event_types: form.event_types.length ? form.event_types : null,
           is_accessible: form.is_accessible,
-          accessibility_features: form.accessibility_features.length
-            ? form.accessibility_features
-            : null,
+          accessibility_features: form.accessibility_features.length ? form.accessibility_features : null,
         })
         .select("id")
         .single();
@@ -136,7 +132,6 @@ export default function CreateProtestForm() {
 
       const protestId = inserted.id as string;
 
-      // Optional cover image upload
       if (coverFile) {
         const path = `${user.id}/${protestId}/${Date.now()}-${safeFileName(coverFile.name)}`;
 
@@ -168,181 +163,172 @@ export default function CreateProtestForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} style={{ marginTop: 16 }}>
-      <div
-        style={{
-          border: "1px solid rgba(0,0,0,0.12)",
-          borderRadius: 14,
-          padding: 16,
-          background: "white",
-        }}
-      >
-        <div style={{ display: "grid", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>Title *</span>
+    <form onSubmit={onSubmit} className="mt-4">
+      <div className="rounded-2xl border border-black/10 bg-white p-4">
+        <div className="grid gap-4">
+          <label className="grid gap-2">
+            <span className="font-bold">Title *</span>
             <input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               placeholder="Example: City Hall Community Meeting"
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.18)",
-              }}
+              className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm"
             />
           </label>
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>Description</span>
+          <label className="grid gap-2">
+            <span className="font-bold">Description</span>
             <textarea
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               placeholder="What is it, where is it happening, what should people know?"
               rows={5}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.18)",
-                resize: "vertical",
-              }}
+              className="w-full resize-y rounded-xl border border-black/20 px-3 py-2 text-sm"
             />
           </label>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontWeight: 700 }}>City *</span>
+          {/* City/State: stacks on mobile, fixed state width on md+ */}
+          <div className="grid gap-4 md:grid-cols-[1fr_120px]">
+            <label className="grid gap-2">
+              <span className="font-bold">City *</span>
               <input
                 value={form.city}
                 onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
                 placeholder="Minneapolis"
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(0,0,0,0.18)",
-                }}
+                className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm"
               />
             </label>
 
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontWeight: 700 }}>State *</span>
+            <label className="grid gap-2">
+              <span className="font-bold">State *</span>
               <input
                 value={form.state}
                 onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
                 placeholder="MN"
                 maxLength={2}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(0,0,0,0.18)",
-                  textTransform: "uppercase",
-                }}
+                className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm uppercase"
               />
             </label>
           </div>
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>Event time</span>
+          <label className="grid gap-2">
+            <span className="font-bold">Event time</span>
             <input
               type="datetime-local"
               value={form.event_time}
               onChange={(e) => setForm((f) => ({ ...f, event_time: e.target.value }))}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.18)",
-                width: "fit-content",
-              }}
+              className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm md:w-fit"
             />
           </label>
 
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontWeight: 700 }}>Event type</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              {EVENT_TYPES.map((t) => (
-                <label key={t} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={form.event_types.includes(t)}
-                    onChange={() =>
-                      setForm((f) => ({ ...f, event_types: toggleArrayValue(f.event_types, t) }))
-                    }
-                  />
-                  <span>{t}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {/* Event type: use grid so labels never jumble on mobile */}
+          <div className="grid gap-2">
+            <div className="font-bold">Event type</div>
 
-          <div
-            style={{
-              borderTop: "1px solid rgba(0,0,0,0.08)",
-              paddingTop: 12,
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={form.is_accessible}
-                onChange={(e) => setForm((f) => ({ ...f, is_accessible: e.target.checked }))}
-              />
-              <span style={{ fontWeight: 700 }}>This event is accessible</span>
-            </label>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 700 }}>Accessibility features</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {ACCESS_FEATURES.map((t) => (
-                  <label key={t} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {EVENT_TYPES.map((t) => {
+                const checked = form.event_types.includes(t);
+                return (
+                  <label
+                    key={t}
+                    className="flex items-start gap-3 rounded-xl border border-black/10 bg-white p-3"
+                  >
                     <input
                       type="checkbox"
-                      checked={form.accessibility_features.includes(t)}
+                      className="mt-1 h-4 w-4 shrink-0"
+                      checked={checked}
                       onChange={() =>
                         setForm((f) => ({
                           ...f,
-                          accessibility_features: toggleArrayValue(f.accessibility_features, t),
+                          event_types: toggleArrayValue(f.event_types, t),
                         }))
                       }
                     />
-                    <span>{t}</span>
+                    <span className="text-sm font-medium leading-5 text-neutral-900">{t}</span>
                   </label>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
 
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>Cover image (optional)</span>
+          {/* Accessibility */}
+          <div className="grid gap-3 border-t border-black/10 pt-4">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0"
+                checked={form.is_accessible}
+                onChange={(e) => setForm((f) => ({ ...f, is_accessible: e.target.checked }))}
+              />
+              <span className="font-bold leading-5">This event is accessible</span>
+            </label>
+
+            <div
+              className={[
+                "grid gap-2",
+                form.is_accessible ? "" : "opacity-50 pointer-events-none select-none",
+              ].join(" ")}
+            >
+              <div className="font-bold">Accessibility features</div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {ACCESS_FEATURES.map((t) => {
+                  const checked = form.accessibility_features.includes(t);
+                  return (
+                    <label
+                      key={t}
+                      className="flex items-start gap-3 rounded-xl border border-black/10 bg-white p-3"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0"
+                        checked={checked}
+                        onChange={() =>
+                          setForm((f) => ({
+                            ...f,
+                            accessibility_features: toggleArrayValue(f.accessibility_features, t),
+                          }))
+                        }
+                      />
+                      <span className="text-sm font-medium leading-5 text-neutral-900">{t}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {!form.is_accessible ? (
+                <p className="text-xs text-neutral-600">
+                  Turn on “This event is accessible” to choose features.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <label className="grid gap-2">
+            <span className="font-bold">Cover image (optional)</span>
             <input
               type="file"
               accept="image/*"
               onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm"
             />
           </label>
 
-          {error ? <p style={{ margin: 0, color: "crimson" }}>{error}</p> : null}
-          {ok ? <p style={{ margin: 0, color: "green" }}>{ok}</p> : null}
+          {error ? <p className="m-0 text-sm text-red-600">{error}</p> : null}
+          {ok ? <p className="m-0 text-sm text-green-700">{ok}</p> : null}
 
           <button
             type="submit"
             disabled={!canSubmit}
-            style={{
-              marginTop: 6,
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.18)",
-              background: canSubmit ? "black" : "rgba(0,0,0,0.25)",
-              color: "white",
-              fontWeight: 800,
-              cursor: canSubmit ? "pointer" : "not-allowed",
-              width: "fit-content",
-            }}
+            className={[
+              "mt-1 inline-flex w-fit items-center justify-center rounded-xl border border-black/20 px-4 py-3 text-sm font-extrabold",
+              canSubmit ? "bg-black text-white" : "bg-black/20 text-white cursor-not-allowed",
+            ].join(" ")}
           >
             {busy ? "Creating..." : "Create listing"}
           </button>
 
-          <p style={{ margin: "6px 0 0", color: "#666", fontSize: 13 }}>
+          <p className="m-0 text-xs text-neutral-600">
             If you are not logged in, you will be sent to Login.
           </p>
         </div>

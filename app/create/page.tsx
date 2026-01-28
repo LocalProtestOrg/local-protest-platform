@@ -22,8 +22,8 @@ export default function CreatePage() {
       />
 
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-        <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div>
+        <header style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 16 }}>
+          <div style={{ minWidth: 260, flex: "1 1 320px" }}>
             <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>New listing</h1>
             <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
               Please keep it factual. Avoid threats, doxxing, or calls for violence.
