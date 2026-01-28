@@ -3,9 +3,12 @@ import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
 import ProtestCard from "@/components/ProtestCard";
 import { supabase } from "@/lib/supabase";
-import { EVENT_TYPES, ACCESSIBILITY_FEATURES } from "@/lib/eventOptions";
+import { unstable_noStore as noStore } from "next/cache";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
+
+const PER_PAGE = 12;
 
 type ProtestRow = {
   id: string;
@@ -18,161 +21,176 @@ type ProtestRow = {
   organizer_username: string | null;
   image_path: string | null;
   status: string | null;
+
   event_types: string[] | null;
   is_accessible: boolean | null;
   accessibility_features: string[] | null;
 };
 
+type PageProps = {
+  searchParams?: Promise<{
+    page?: string; // "1", "2", ...
+  }>;
+};
+
 export const metadata: Metadata = {
-  title: "Browse Civic Events — Local Assembly",
-  description:
-    "Browse community-submitted civic events across the United States including rallies, town halls, voter registration drives, trainings, and more.",
+  title: "Events | Local Assembly",
+  description: "Browse more civic events across the United States.",
   alternates: { canonical: "https://localassembly.org/events" },
   robots: { index: true, follow: true },
 };
 
-function safeText(s: string, max = 160) {
-  const t = (s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  if (t.length <= max) return t;
-  return t.slice(0, max - 1) + "…";
+function clampPage(n: number) {
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
 }
 
-export default async function EventsIndexPage() {
-  const { data, error } = await supabase
+export default async function EventsPage({ searchParams }: PageProps) {
+  noStore();
+
+  const sp = (await searchParams) ?? {};
+  const page = clampPage(Number(sp.page ?? "1"));
+
+  const from = (page - 1) * PER_PAGE;
+  const to = from + PER_PAGE - 1;
+
+  const { data, error, count } = await supabase
     .from("protests")
     .select(
-      "id,title,description,city,state,event_time,created_at,organizer_username,image_path,status,event_types,is_accessible,accessibility_features"
+      "id,title,description,city,state,event_time,created_at,organizer_username,image_path,status,event_types,is_accessible,accessibility_features",
+      { count: "exact" }
     )
     .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(60);
+    .range(from, to);
 
   const protests = (data ?? []) as ProtestRow[];
+  const total = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "CollectionPage",
-    name: "Browse Civic Events",
-    url: "https://localassembly.org/events",
-    description:
-      "Browse community-submitted civic events across the United States. Neutral platform; no endorsements.",
-    mainEntity: {
-      "@type": "ItemList",
-      itemListOrder: "https://schema.org/ItemListOrderDescending",
-      numberOfItems: protests.length,
-      itemListElement: protests.slice(0, 25).map((p, idx) => ({
-        "@type": "ListItem",
-        position: idx + 1,
-        url: `https://localassembly.org/protest/${p.id}`,
-        name: p.title,
-        description: p.description ? safeText(p.description) : undefined,
-      })),
-    },
-  };
+  const prevPage = page > 1 ? page - 1 : null;
+  const nextPage = page < totalPages ? page + 1 : null;
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-
       <PageHeader
-        title="Browse Civic Events"
-        subtitle="Explore community-submitted civic gatherings across the U.S."
+        title="Browse Events"
+        subtitle="More listings from across the U.S. This platform is neutral and does not endorse any listing."
         imageUrl="/images/home-hero.jpg"
       />
 
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-        <p style={{ marginTop: 0, color: "#444" }}>
-          Use these pages to browse by event type or accessibility. (Filters can come later.)
-        </p>
-
-        <section style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>Browse by event type</h2>
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {EVENT_TYPES.map((t) => (
-              <Link
-                key={t}
-                href={`/events/types/${encodeURIComponent(t)}`}
-                style={{
-                  border: "1px solid #e5e5e5",
-                  borderRadius: 999,
-                  padding: "8px 12px",
-                  background: "white",
-                }}
-              >
-                {t}
-              </Link>
-            ))}
+        <header style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>All events</h1>
+            <p style={{ marginTop: 8, color: "#444" }}>
+              Page {page} of {totalPages}
+            </p>
           </div>
-        </section>
 
-        <section style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>Browse by accessibility</h2>
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <Link
-              href="/events/accessibility"
-              style={{
-                border: "1px solid #111",
-                borderRadius: 999,
-                padding: "8px 12px",
-                background: "#111",
-                color: "white",
-                fontWeight: 800,
-              }}
-            >
-              Accessibility overview
-            </Link>
-
-            {ACCESSIBILITY_FEATURES.map((f) => (
-              <Link
-                key={f}
-                href={`/events/accessibility/${encodeURIComponent(f)}`}
-                style={{
-                  border: "1px solid #e5e5e5",
-                  borderRadius: 999,
-                  padding: "8px 12px",
-                  background: "white",
-                }}
-              >
-                {f}
-              </Link>
-            ))}
-          </div>
-        </section>
+          <nav style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <Link href="/">Home</Link>
+            <Link href="/create">Create</Link>
+          </nav>
+        </header>
 
         {error ? (
           <p style={{ marginTop: 16, color: "crimson" }}>Database error: {error.message}</p>
         ) : null}
 
-        <section style={{ marginTop: 26 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>Latest listings</h2>
-          <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
-            {protests.length === 0 ? (
-              <p>No listings yet.</p>
-            ) : (
-              protests.map((p) => (
-                <ProtestCard
-                  key={p.id}
-                  protest={{
-                    id: p.id,
-                    title: p.title,
-                    description: p.description ?? "",
-                    city: p.city,
-                    state: p.state,
-                    event_time: p.event_time,
-                    image_path: p.image_path,
-                  }}
-                />
-              ))
-            )}
-          </div>
+        <section
+          style={{
+            marginTop: 16,
+            display: "grid",
+            gap: 14,
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          }}
+        >
+          {protests.length === 0 ? (
+            <p style={{ gridColumn: "1 / -1" }}>No listings found.</p>
+          ) : (
+            protests.map((p) => (
+              <ProtestCard
+                key={p.id}
+                protest={{
+                  id: p.id,
+                  title: p.title,
+                  description: p.description ?? "",
+                  city: p.city,
+                  state: p.state,
+                  event_time: p.event_time,
+                  image_path: p.image_path,
+                }}
+              />
+            ))
+          )}
         </section>
 
-        <p style={{ marginTop: 28, color: "#666", fontSize: 13 }}>
-          Neutrality note: Local Assembly does not endorse or oppose any listing.
-        </p>
+        <div
+          style={{
+            marginTop: 22,
+            display: "flex",
+            justifyContent: "center",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          {prevPage ? (
+            <Link
+              href={`/events?page=${prevPage}`}
+              style={{
+                display: "inline-block",
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(0,0,0,0.18)",
+                background: "white",
+                color: "black",
+                fontWeight: 800,
+                textDecoration: "none",
+              }}
+            >
+              Previous
+            </Link>
+          ) : null}
+
+          {nextPage ? (
+            <Link
+              href={`/events?page=${nextPage}`}
+              style={{
+                display: "inline-block",
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(0,0,0,0.18)",
+                background: "white",
+                color: "black",
+                fontWeight: 800,
+                textDecoration: "none",
+              }}
+            >
+              Next
+            </Link>
+          ) : null}
+        </div>
+
+        <div style={{ marginTop: 16, display: "grid", justifyItems: "center" }}>
+          <a
+            href="https://www.localassembly.org/email-your-congressperson"
+            style={{
+              display: "inline-block",
+              padding: "12px 18px",
+              borderRadius: 12,
+              border: "1px solid rgba(0,0,0,0.18)",
+              background: "red",
+              color: "white",
+              fontWeight: 900,
+              textDecoration: "none",
+              textAlign: "center",
+            }}
+          >
+            Email Your Congressperson
+          </a>
+        </div>
       </main>
     </>
   );
