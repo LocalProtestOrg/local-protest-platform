@@ -1,7 +1,5 @@
 import type { MetadataRoute } from "next";
 
-const BASE_URL = "https://localassembly.org";
-
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -9,12 +7,13 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         disallow: [
-          "/admin",
-          // Add other private paths if you ever create them:
-          // "/api",
+          "/login",
+          "/create",
+          "/account",
         ],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: "https://localassembly.org/sitemap.xml",
+    host: "https://localassembly.org",
   };
 }
