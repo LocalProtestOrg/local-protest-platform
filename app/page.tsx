@@ -276,11 +276,12 @@ export default async function HomePage({ searchParams }: PageProps) {
           </Link>
 
           <a
-            href="https://www.localassembly.org/email-your-congressperson"
-            className="inline-block rounded-xl border border-black/20 bg-red-600 px-5 py-3 text-center font-black text-white no-underline"
-          >
-            Email Your Congressperson
-          </a>
+  href="https://www.localassembly.org/email-your-congressperson"
+  className="inline-block rounded-xl border border-black/20 bg-red-600 px-5 py-3 text-center font-black text-white no-underline"
+  style={{ color: "white" }}
+>
+  Email Your Congressperson
+</a>
         </div>
 
         <footer className="mt-8 text-xs text-neutral-600">
