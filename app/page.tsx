@@ -223,7 +223,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
         {/* Removed the header nav here so the ONLY nav is the PageHeader dropdown */}
         <header>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Find civic events near you (DEPLOY TEST)</h1>
+          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Find civic events near you</h1>
           <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
             Search by event name, city, state, or organizer. This platform is neutral and does not
             endorse or oppose any listing.
