@@ -1,60 +1,98 @@
 import type { MetadataRoute } from "next";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 
-export const revalidate = 3600;
+const SITE_URL = "https://localassembly.org";
 
-const BASE_URL = "https://localassembly.org";
+// Tune this if you expect huge volumes.
+// Google supports up to 50,000 URLs per sitemap file.
+// If you go beyond that later, we can add a sitemap index.
+const PAGE_SIZE = 1000;
+
+type ProtestRow = {
+  id: string;
+  updated_at?: string | null;
+  created_at?: string | null;
+};
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const staticRoutes: MetadataRoute.Sitemap = [
+  const now = new Date();
+
+  // Static routes you want indexed
+  const staticEntries: MetadataRoute.Sitemap = [
     {
-      url: `${BASE_URL}/`,
-      lastModified: new Date(),
-      changeFrequency: "daily",
+      url: `${SITE_URL}/`,
+      lastModified: now,
+      changeFrequency: "hourly",
       priority: 1,
     },
     {
-      url: `${BASE_URL}/email-your-congressperson`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.6,
+      url: `${SITE_URL}/events`,
+      lastModified: now,
+      changeFrequency: "hourly",
+      priority: 0.9,
     },
     {
-      url: `${BASE_URL}/create`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.6,
+      url: `${SITE_URL}/know-your-rights`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.7,
     },
     {
-      url: `${BASE_URL}/login`,
-      lastModified: new Date(),
-      changeFrequency: "yearly",
-      priority: 0.2,
+      url: `${SITE_URL}/email-your-congressperson`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
     },
+    // Keep these out of the sitemap if they are noindex:
+    // { url: `${SITE_URL}/create`, lastModified: now },
+    // { url: `${SITE_URL}/login`, lastModified: now },
   ];
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  try {
+    const all: ProtestRow[] = [];
+    let from = 0;
 
-  // If env isn't present during build, do NOT crash.
-  if (!url || !anon) return staticRoutes;
+    while (true) {
+      const to = from + PAGE_SIZE - 1;
 
-  const supabase = createClient(url, anon);
+      const { data, error } = await supabase
+        .from("protests")
+        .select("id,updated_at,created_at")
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
-  const { data, error } = await supabase
-    .from("protests")
-    .select("id,created_at")
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
+      if (error) throw error;
 
-  if (error) return staticRoutes;
+      const rows = (data ?? []) as ProtestRow[];
+      all.push(...rows);
 
-  const dynamicRoutes: MetadataRoute.Sitemap = (data ?? []).map((p: any) => ({
-    url: `${BASE_URL}/protest/${p.id}`,
-    lastModified: p.created_at ? new Date(p.created_at) : new Date(),
-    changeFrequency: "weekly",
-    priority: 0.8,
-  }));
+      // If we got less than a full page, we are done.
+      if (rows.length < PAGE_SIZE) break;
 
-  return [...staticRoutes, ...dynamicRoutes];
+      from += PAGE_SIZE;
+
+      // Safety stop: avoid runaway loops if something goes weird
+      if (from > 50000) break;
+    }
+
+    const listingEntries: MetadataRoute.Sitemap = all.map((p) => {
+      const last =
+        (p.updated_at ?? p.created_at)
+          ? new Date((p.updated_at ?? p.created_at) as string)
+          : now;
+
+      return {
+        url: `${SITE_URL}/protest/${p.id}`,
+        lastModified: last,
+        changeFrequency: "daily",
+        priority: 0.7,
+      };
+    });
+
+    return [...staticEntries, ...listingEntries];
+  } catch {
+    // If Supabase fails for any reason, still serve a valid sitemap
+    return staticEntries;
+  }
 }
