@@ -79,28 +79,22 @@ export default async function EventsPage({ searchParams }: PageProps) {
         imageUrl="/images/home-hero.jpg"
       />
 
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
+      <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
         <header>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>All events</h1>
-          <p style={{ marginTop: 8, color: "#444" }}>
+          <h1 className="m-0 text-[26px] font-black md:text-[28px]">All events</h1>
+          <p className="mt-2 text-sm text-neutral-700 md:text-base">
             Page {page} of {totalPages}
           </p>
         </header>
 
         {error ? (
-          <p style={{ marginTop: 16, color: "crimson" }}>Database error: {error.message}</p>
+          <p className="mt-4 text-sm text-red-700">Database error: {error.message}</p>
         ) : null}
 
-        <section
-          style={{
-            marginTop: 16,
-            display: "grid",
-            gap: 14,
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          }}
-        >
+        {/* Mobile: 1 column (stacked). Desktop: 3 columns. */}
+        <section className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           {protests.length === 0 ? (
-            <p style={{ gridColumn: "1 / -1" }}>No listings found.</p>
+            <p className="md:col-span-3">No listings found.</p>
           ) : (
             protests.map((p) => (
               <ProtestCard
@@ -119,29 +113,12 @@ export default async function EventsPage({ searchParams }: PageProps) {
           )}
         </section>
 
-        <div
-          style={{
-            marginTop: 22,
-            display: "flex",
-            justifyContent: "center",
-            gap: 12,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
+        {/* Pagination (same behavior as before) */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           {prevPage ? (
             <Link
               href={`/events?page=${prevPage}`}
-              style={{
-                display: "inline-block",
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.18)",
-                background: "white",
-                color: "black",
-                fontWeight: 800,
-                textDecoration: "none",
-              }}
+              className="inline-block rounded-xl border border-black/20 bg-white px-4 py-2 font-extrabold text-black no-underline"
             >
               Previous
             </Link>
@@ -150,36 +127,18 @@ export default async function EventsPage({ searchParams }: PageProps) {
           {nextPage ? (
             <Link
               href={`/events?page=${nextPage}`}
-              style={{
-                display: "inline-block",
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.18)",
-                background: "white",
-                color: "black",
-                fontWeight: 800,
-                textDecoration: "none",
-              }}
+              className="inline-block rounded-xl border border-black/20 bg-white px-4 py-2 font-extrabold text-black no-underline"
             >
               Next
             </Link>
           ) : null}
         </div>
 
-        <div style={{ marginTop: 16, display: "grid", justifyItems: "center" }}>
+        <div className="mt-6 grid justify-items-center">
           <a
             href="https://www.localassembly.org/email-your-congressperson"
-            style={{
-              display: "inline-block",
-              padding: "12px 18px",
-              borderRadius: 12,
-              border: "1px solid rgba(0,0,0,0.18)",
-              background: "red",
-              color: "white",
-              fontWeight: 900,
-              textDecoration: "none",
-              textAlign: "center",
-            }}
+            className="inline-block rounded-xl border border-black/20 bg-red-600 px-5 py-3 text-center font-black text-white no-underline"
+            style={{ color: "white" }}
           >
             Email Your Congressperson
           </a>
