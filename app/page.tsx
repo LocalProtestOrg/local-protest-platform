@@ -29,14 +29,16 @@ type ProtestRow = {
 };
 
 type PageProps = {
+  // Next 16: treat searchParams as Promise
   searchParams?: Promise<{
     q?: string;
-    types?: string;
-    accessible?: string;
-    features?: string;
+    types?: string; // comma-separated
+    accessible?: string; // "true" | "false"
+    features?: string; // comma-separated
   }>;
 };
 
+// Homepage SEO (App Router)
 export const metadata: Metadata = {
   title: "Local Assembly - Find Protests, Rallies, Town Halls & Civic Events Near You",
   description:
@@ -95,10 +97,12 @@ function parseAccessibleParam(v: string | undefined): boolean | null {
   return null;
 }
 
+// Escapes % and _ so ilike does not treat them as wildcards from user input
 function escapeIlike(input: string) {
   return input.replace(/[%_]/g, "\\$&");
 }
 
+// If someone searches "Houston, TX" or "Houston TX", treat it as city/state filter
 function parseCityState(q: string): { city?: string; state?: string } {
   const raw = q.trim();
   if (!raw) return {};
@@ -135,10 +139,12 @@ export default async function HomePage({ searchParams }: PageProps) {
     .order("created_at", { ascending: false })
     .limit(HOME_EVENTS_LIMIT);
 
+  // Filters
   if (types.length > 0) query = query.overlaps("event_types", types);
   if (accessible !== null) query = query.eq("is_accessible", accessible);
   if (features.length > 0) query = query.overlaps("accessibility_features", features);
 
+  // Search behavior
   if (q) {
     const { city, state } = parseCityState(q);
 
@@ -178,8 +184,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         "@type": "WebSite",
         name: "Local Assembly",
         url: "https://localassembly.org/",
-        description:
-          "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
+        description: "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
         potentialAction: {
           "@type": "SearchAction",
           target: "https://localassembly.org/?q={search_term_string}",
@@ -188,9 +193,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       },
       {
         "@type": "ItemList",
-        name: appliedFiltersLabel
-          ? `Listings (${appliedFiltersLabel})`
-          : "Latest civic event listings",
+        name: appliedFiltersLabel ? `Listings (${appliedFiltersLabel})` : "Latest civic event listings",
         itemListOrder: "https://schema.org/ItemListOrderDescending",
         numberOfItems: protests.length,
         itemListElement: protests.slice(0, 25).map((p, idx) => ({
@@ -218,10 +221,9 @@ export default async function HomePage({ searchParams }: PageProps) {
       />
 
       <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
+        {/* Removed the header nav here so the ONLY nav is the PageHeader dropdown */}
         <header>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>
-            Find civic events near you
-          </h1>
+          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>Find civic events near you</h1>
           <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
             Search by event name, city, state, or organizer. This platform is neutral and does not
             endorse or oppose any listing.
@@ -246,6 +248,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           )}
         </div>
 
+        {/* Grid: 3 across, 2 rows total because we limit to 6 */}
         <section
           style={{
             marginTop: 16,
@@ -274,6 +277,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           )}
         </section>
 
+        {/* Buttons under the grid */}
         <div style={{ marginTop: 20, display: "grid", gap: 12, justifyItems: "center" }}>
           <Link
             href="/events"
