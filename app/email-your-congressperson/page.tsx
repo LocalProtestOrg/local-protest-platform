@@ -2,6 +2,23 @@
 
 import * as React from "react";
 import Link from "next/link";
+import PageHeader from "@/components/PageHeader";
+
+export default function EmailYourCongresspersonPage() {
+  return (
+    <>
+      <PageHeader
+        title="Email Your Congressperson"
+        subtitle="Send a message to your elected officials in minutes."
+        imageUrl="/images/home-hero.jpg"
+      />
+
+      <main style={{ maxWidth: 820, margin: "0 auto", padding: 24 }}>
+        {/* your existing page content here */}
+      </main>
+    </>
+  );
+}
 
 type StateOption = { code: string; name: string };
 
