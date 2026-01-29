@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/next";
+import { Analytics } from "@vercel/analytics/react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,12 +17,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://localassembly.org"),
   title: {
     default: "Local Assembly",
-    template: "%s — Local Assembly",
+    template: "%s | Local Assembly",
   },
-  description: "A neutral, community-submitted directory of public assemblies and civic events.",
-  alternates: {
-    canonical: "/",
-  },
+  description:
+    "A neutral, community-submitted directory of public assemblies and civic events.",
+  alternates: { canonical: "/" },
   robots: {
     index: true,
     follow: true,
@@ -46,7 +45,7 @@ export const metadata: Metadata = {
         url: "/images/home-hero.jpg",
         width: 1200,
         height: 630,
-        alt: "Local Assembly — civic event listings",
+        alt: "Local Assembly civic event listings",
       },
     ],
   },
@@ -57,9 +56,7 @@ export const metadata: Metadata = {
       "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
     images: ["/images/home-hero.jpg"],
   },
-  icons: {
-    icon: "/favicon.ico",
-  },
+  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({
