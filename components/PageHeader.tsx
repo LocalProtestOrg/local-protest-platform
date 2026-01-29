@@ -111,7 +111,7 @@ export default function PageHeader({
             aria-label="Site menu"
             style={{
               marginTop: 10,
-              minWidth: 220,
+              minWidth: 240,
               background: "#fff",
               borderRadius: 12,
               border: "1px solid rgba(0,0,0,0.14)",
@@ -122,20 +122,27 @@ export default function PageHeader({
             <MenuItem href="/" onPick={() => setOpen(false)}>
               Home
             </MenuItem>
+
             <MenuItem href="/events" onPick={() => setOpen(false)}>
               Events
             </MenuItem>
-            <MenuItem href="/login" onPick={() => setOpen(false)}>
-              Login
-            </MenuItem>
-            <MenuItem href="/email-your-congressperson" onPick={() => setOpen(false)}>
-              Email Your Congressperson
-            </MenuItem>
+
             <MenuItem href="/create" onPick={() => setOpen(false)}>
-              Create Event
+              Create Listing
             </MenuItem>
+
             <MenuItem href="/know-your-rights" onPick={() => setOpen(false)}>
               Know Your Rights
+            </MenuItem>
+
+            <MenuItemStrong href="/email-your-congressperson" onPick={() => setOpen(false)}>
+              Email Your Congressperson
+            </MenuItemStrong>
+
+            <MenuItemDivider />
+
+            <MenuItem href="/login" onPick={() => setOpen(false)}>
+              Login
             </MenuItem>
           </div>
         )}
@@ -154,13 +161,9 @@ export default function PageHeader({
         <div style={{ maxWidth: 900, margin: "0 auto", padding: 24, color: "#fff" }}>
           {showText && (
             <>
-              <h1 style={{ fontSize: 38, fontWeight: 800, margin: 0 }}>
-                {title}
-              </h1>
+              <h1 style={{ fontSize: 38, fontWeight: 800, margin: 0 }}>{title}</h1>
               {subtitle && (
-                <p style={{ fontSize: 18, marginTop: 10, maxWidth: 700 }}>
-                  {subtitle}
-                </p>
+                <p style={{ fontSize: 18, marginTop: 10, maxWidth: 700 }}>{subtitle}</p>
               )}
             </>
           )}
@@ -196,4 +199,37 @@ function MenuItem({
       {children}
     </Link>
   );
+}
+
+function MenuItemStrong({
+  href,
+  children,
+  onPick,
+}: {
+  href: string;
+  children: React.ReactNode;
+  onPick: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      role="menuitem"
+      onClick={onPick}
+      style={{
+        display: "block",
+        padding: "12px 14px",
+        textDecoration: "none",
+        fontWeight: 900,
+        background: "#dc2626", // red-600-ish
+        color: "white",
+        borderBottom: "1px solid rgba(0,0,0,0.06)",
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function MenuItemDivider() {
+  return <div style={{ height: 8, background: "rgba(0,0,0,0.04)" }} />;
 }
