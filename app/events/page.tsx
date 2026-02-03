@@ -36,7 +36,7 @@ type PageProps = {
 export const metadata: Metadata = {
   title: "Events | Local Assembly",
   description: "Browse more civic events across the United States.",
-  alternates: { canonical: "https://localassembly.org/events" },
+  alternates: { canonical: "https://www.localassembly.org/events" },
   robots: { index: true, follow: true },
 };
 

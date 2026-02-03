@@ -8,7 +8,7 @@ export const revalidate = 0;
 export const metadata: Metadata = {
   title: "Create a Listing | Local Assembly",
   description: "Create a new civic event listing on Local Assembly.",
-  alternates: { canonical: "https://localassembly.org/create" },
+  alternates: { canonical: "https://www.localassembly.org/create" },
   robots: { index: false, follow: true },
 };
 

@@ -88,14 +88,14 @@ export async function generateMetadata({
 
   const title = `${p.title} — ${location} | Local Assembly`;
   const description = safeText(p.description || "View listing details on Local Assembly.", 170);
-  const url = `https://localassembly.org/protest/${p.id}`;
+  const url = `https://www.localassembly.org/protest/${p.id}`;
 
   // Build absolute OG image url
   const rawImg = resolveImageSrcServer(p.image_path);
   const ogImage =
     rawImg.startsWith("http://") || rawImg.startsWith("https://")
       ? rawImg
-      : `https://localassembly.org${rawImg}`;
+      : `https://www.localassembly.org${rawImg}`;
 
   return {
     title,
@@ -143,7 +143,7 @@ export default async function ProtestPage({ params }: { params: { id: string } }
           description: safeText(p.description || "", 500),
           eventStatus: "https://schema.org/EventScheduled",
           startDate: p.event_time || undefined,
-          url: `https://localassembly.org/protest/${p.id}`,
+          url: `https://www.localassembly.org/protest/${p.id}`,
           location: {
             "@type": "Place",
             name:
@@ -169,7 +169,7 @@ export default async function ProtestPage({ params }: { params: { id: string } }
             ? [
                 baseImageUrl.startsWith("http://") || baseImageUrl.startsWith("https://")
                   ? baseImageUrl
-                  : `https://localassembly.org${baseImageUrl}`,
+                  : `https://www.localassembly.org${baseImageUrl}`,
               ]
             : undefined,
           accessibilityFeature: (p.accessibility_features || undefined) ?? undefined,

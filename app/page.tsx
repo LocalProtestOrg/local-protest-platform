@@ -41,17 +41,17 @@ export const metadata: Metadata = {
   title: "Local Assembly - Find Protests, Rallies, Town Halls & Civic Events Near You",
   description:
     "Local Assembly is a neutral, community-submitted directory of public demonstrations, rallies, town halls, voter registration drives, and civic gatherings across the United States.",
-  alternates: { canonical: "https://localassembly.org/" },
+  alternates: { canonical: "https://www.localassembly.org/" },
   openGraph: {
     type: "website",
-    url: "https://localassembly.org/",
+    url: "https://www.localassembly.org/",
     title: "Local Assembly - Civic Events Near You",
     description:
       "Browse and search community-submitted civic gatherings across the U.S. This platform is neutral and does not endorse listings.",
     siteName: "Local Assembly",
     images: [
       {
-        url: "https://localassembly.org/images/home-hero.jpg",
+        url: "https://www.localassembly.org/images/home-hero.jpg",
         width: 1200,
         height: 630,
         alt: "Local Assembly civic gathering listings",
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
     title: "Local Assembly - Civic Events Near You",
     description:
       "Search and browse community-submitted civic events across the U.S. Neutral platform; no endorsements.",
-    images: ["https://localassembly.org/images/home-hero.jpg"],
+    images: ["https://www.localassembly.org/images/home-hero.jpg"],
   },
   robots: { index: true, follow: true },
 };
@@ -177,12 +177,12 @@ export default async function HomePage({ searchParams }: PageProps) {
       {
         "@type": "WebSite",
         name: "Local Assembly",
-        url: "https://localassembly.org/",
+        url: "https:www.//localassembly.org/",
         description:
           "A neutral, community-submitted directory of public demonstrations and civic gatherings.",
         potentialAction: {
           "@type": "SearchAction",
-          target: "https://localassembly.org/?q={search_term_string}",
+          target: "https://www.localassembly.org/?q={search_term_string}",
           "query-input": "required name=search_term_string",
         },
       },
@@ -194,7 +194,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         itemListElement: protests.slice(0, 25).map((p, idx) => ({
           "@type": "ListItem",
           position: idx + 1,
-          url: `https://localassembly.org/protest/${p.id}`,
+          url: `https://www.localassembly.org/protest/${p.id}`,
           name: p.title,
           description: p.description ? safeText(p.description, 160) : undefined,
         })),

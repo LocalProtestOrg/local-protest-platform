@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { supabase } from "@/lib/supabase";
 
-const SITE_URL = "https://localassembly.org";
+const SITE_URL = "https://www.localassembly.org";
 
 // Tune this if you expect huge volumes.
 // Google supports up to 50,000 URLs per sitemap file.

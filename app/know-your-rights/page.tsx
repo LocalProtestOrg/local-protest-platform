@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: "Know Your Rights | Local Assembly",
   description:
     "Know your rights when attending or organizing public civic events in the United States: peaceful assembly, permits, recording, police interactions, dispersal orders, and accessibility.",
-  alternates: { canonical: "https://localassembly.org/know-your-rights" },
+  alternates: { canonical: "https://www.localassembly.org/know-your-rights" },
   robots: { index: true, follow: true },
 };
 

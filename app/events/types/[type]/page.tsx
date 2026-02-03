@@ -41,7 +41,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: { canonical: `https://localassembly.org/events/types/${encodeURIComponent(decoded)}` },
+    alternates: { canonical: `https://www.localassembly.org/events/types/${encodeURIComponent(decoded)}` },
     robots: { index: true, follow: true },
   };
 }
@@ -70,7 +70,7 @@ export default async function EventsByTypePage({
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: `${decoded} events`,
-    url: `https://localassembly.org/events/types/${encodeURIComponent(decoded)}`,
+    url: `https://www.localassembly.org/events/types/${encodeURIComponent(decoded)}`,
     description: `Browse ${decoded} and related civic events submitted by organizers.`,
     mainEntity: {
       "@type": "ItemList",
@@ -78,7 +78,7 @@ export default async function EventsByTypePage({
       itemListElement: protests.slice(0, 25).map((p, idx) => ({
         "@type": "ListItem",
         position: idx + 1,
-        url: `https://localassembly.org/protest/${p.id}`,
+        url: `https://www.localassembly.org/protest/${p.id}`,
         name: p.title,
         description: p.description ? safeText(p.description) : undefined,
       })),
