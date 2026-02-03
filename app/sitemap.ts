@@ -3,9 +3,10 @@ import { supabase } from "@/lib/supabase";
 
 const SITE_URL = "https://www.localassembly.org";
 
-// Tune this if you expect huge volumes.
 // Google supports up to 50,000 URLs per sitemap file.
-// If you go beyond that later, we can add a sitemap index.
+const MAX_URLS = 50000;
+
+// Tune this if you expect huge volumes.
 const PAGE_SIZE = 1000;
 
 type ProtestRow = {
@@ -22,13 +23,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     {
       url: `${SITE_URL}/`,
       lastModified: now,
-      changeFrequency: "hourly",
+      changeFrequency: "daily",
       priority: 1,
     },
     {
       url: `${SITE_URL}/events`,
       lastModified: now,
-      changeFrequency: "hourly",
+      changeFrequency: "daily",
       priority: 0.9,
     },
     {
@@ -52,35 +53,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const all: ProtestRow[] = [];
     let from = 0;
 
-    while (true) {
+    while (all.length < MAX_URLS) {
       const to = from + PAGE_SIZE - 1;
 
       const { data, error } = await supabase
         .from("protests")
         .select("id,updated_at,created_at")
         .eq("status", "active")
+        .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .range(from, to);
 
       if (error) throw error;
 
       const rows = (data ?? []) as ProtestRow[];
+      if (rows.length === 0) break;
+
       all.push(...rows);
 
       // If we got less than a full page, we are done.
       if (rows.length < PAGE_SIZE) break;
 
       from += PAGE_SIZE;
-
-      // Safety stop: avoid runaway loops if something goes weird
-      if (from > 50000) break;
     }
 
-    const listingEntries: MetadataRoute.Sitemap = all.map((p) => {
-      const last =
-        (p.updated_at ?? p.created_at)
-          ? new Date((p.updated_at ?? p.created_at) as string)
-          : now;
+    // Cap to MAX_URLS in case the last page pushed us over.
+    const capped = all.slice(0, MAX_URLS);
+
+    const listingEntries: MetadataRoute.Sitemap = capped.map((p) => {
+      const lastValue = p.updated_at ?? p.created_at;
+      const last = lastValue ? new Date(lastValue) : now;
 
       return {
         url: `${SITE_URL}/protest/${p.id}`,
