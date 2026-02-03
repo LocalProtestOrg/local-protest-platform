@@ -30,6 +30,55 @@ const styles = {
   note: { margin: 0, color: "#444", fontSize: 14, lineHeight: 1.6 },
   divider: { height: 1, background: "rgba(0,0,0,0.10)", margin: "8px 0" },
   inlineLink: { color: "inherit", fontWeight: 800, textDecoration: "underline" } as const,
+  callout: {
+    border: "1px solid rgba(0,0,0,0.10)",
+    borderRadius: 12,
+    padding: 12,
+    background: "rgba(0,0,0,0.03)",
+  } as const,
+  quote: {
+    margin: "8px 0 0",
+    padding: "10px 12px",
+    borderLeft: "4px solid rgba(0,0,0,0.25)",
+    background: "rgba(0,0,0,0.03)",
+    borderRadius: 10,
+    color: "#222",
+  } as const,
+  printCard: {
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 14,
+    border: "2px dashed rgba(0,0,0,0.35)",
+    background: "white",
+  } as const,
+  printHeaderRow: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  } as const,
+  tag: {
+    display: "inline-block",
+    fontSize: 12,
+    fontWeight: 900,
+    padding: "4px 8px",
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,0.15)",
+    background: "rgba(0,0,0,0.03)",
+    color: "#222",
+  } as const,
+  cardText: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 1.6,
+    color: "#111",
+  } as const,
+  cardList: {
+    margin: "8px 0 0 18px",
+    padding: 0,
+    color: "#111",
+  } as const,
 };
 
 export default function KnowYourRightsPage() {
@@ -58,6 +107,14 @@ export default function KnowYourRightsPage() {
       q: "How does accessibility apply to civic events?",
       a: "Accessibility can include routes, seating, signage, and accommodations for hearing or visual needs. When organizers include accessibility details, it helps attendees plan and participate.",
     },
+
+    // NEW: bilingual FAQ item for SEO + rich results
+    {
+      q: "What can I say if I do not want to answer questions? / ¿Qué puedo decir si no quiero contestar preguntas?",
+      a:
+        "English: You can say, \"I am exercising my right to remain silent. Am I free to leave?\" If you are detained, you can request an attorney.\n\n" +
+        "Español: Usted puede decir, \"Estoy ejerciendo mi derecho de permanecer callado. ¿Soy libre de irme?\" Si está detenido, puede pedir un abogado.",
+    },
   ];
 
   const faqJsonLd = {
@@ -78,6 +135,22 @@ export default function KnowYourRightsPage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+
+      {/* Print-friendly rules */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              /* Hide large hero header and CTA when printing */
+              header, nav { display: none !important; }
+              a { color: #000 !important; text-decoration: none !important; }
+              main { padding: 0 !important; }
+              .no-print { display: none !important; }
+              .print-focus { break-inside: avoid; page-break-inside: avoid; }
+            }
+          `,
+        }}
       />
 
       <PageHeader
@@ -189,6 +262,91 @@ export default function KnowYourRightsPage() {
             </ul>
           </div>
 
+          {/* NEW: Rights statements + printable card */}
+          <div style={styles.card}>
+            <h2 style={styles.h2}>Rights Statements You Can Say</h2>
+            <p style={styles.p}>
+              These examples can help you communicate clearly and calmly. Use the language that fits
+              your situation. If you feel unsafe, prioritize your safety and consider asking for an
+              attorney.
+            </p>
+
+            <div className="no-print" style={{ ...styles.callout, marginTop: 12 }}>
+              <p style={styles.note}>
+                Print tip: To print or save as PDF, use <strong>Ctrl+P</strong> (Windows) or{" "}
+                <strong>Cmd+P</strong> (Mac). You can also copy the text below.
+              </p>
+            </div>
+
+            <div id="rights-card" className="print-focus" style={styles.printCard}>
+              <div style={styles.printHeaderRow}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontWeight: 900, fontSize: 16, color: "#111" }}>
+                    Rights Card (English + Español)
+                  </div>
+                  <div style={{ fontSize: 13, color: "#333", lineHeight: 1.5 }}>
+                    Keep calm, speak clearly, and repeat as needed.
+                  </div>
+                </div>
+                <span style={styles.tag}>Copy or Print</span>
+              </div>
+
+              <div style={styles.divider} />
+
+              <div style={styles.cardText}>
+                <div style={{ fontWeight: 900, marginTop: 4 }}>English</div>
+                <ul style={styles.cardList}>
+                  <li style={styles.li}>
+                    I do not wish to speak with you, answer your questions, or sign or hand you any
+                    documents. I am exercising my Fifth Amendment rights under the United States
+                    Constitution.
+                  </li>
+                  <li style={styles.li}>
+                    I do not give you permission to enter my home based on my Fourth Amendment rights
+                    under the United States Constitution unless you have a warrant to enter, signed by
+                    a judge or magistrate with my name on it. Please slide it under the door.
+                  </li>
+                  <li style={styles.li}>
+                    I do not give you permission to search any of my belongings based on my Fourth
+                    Amendment rights.
+                  </li>
+                  <li style={styles.li}>I choose to exercise my constitutional rights.</li>
+                  <li style={styles.li}>
+                    If I am outside my home: Am I free to leave?
+                  </li>
+                </ul>
+
+                <div style={{ fontWeight: 900, marginTop: 12 }}>Español</div>
+                <ul style={styles.cardList}>
+                  <li style={styles.li}>
+                    NO ABRA LA PUERTA si un agente de inmigración está tocando la puerta.
+                  </li>
+                  <li style={styles.li}>
+                    NO CONTESTE NINGUNA PREGUNTA si un agente de inmigración trata de hablar con usted.
+                    Usted tiene el derecho de mantenerse callado.
+                  </li>
+                  <li style={styles.li}>
+                    NO FIRME NADA sin antes hablar con un abogado. Usted tiene el derecho de hablar
+                    con un abogado.
+                  </li>
+                  <li style={styles.li}>
+                    Si usted está afuera de su casa, pregunte al agente si es libre para irse. Si el
+                    agente dice que sí, váyase con tranquilidad.
+                  </li>
+                  <li style={styles.li}>
+                    ENTREGUE ESTA TARJETA AL AGENTE. Si usted está dentro de su casa, muestre la tarjeta
+                    por la ventana o pásela debajo de la puerta.
+                  </li>
+                </ul>
+
+                <p style={{ ...styles.note, marginTop: 10 }}>
+                  Note: Laws vary by location and situation. If you need legal advice, consult a
+                  qualified professional.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div style={styles.card}>
             <h2 style={styles.h2}>If You Are Asked to Disperse</h2>
             <p style={styles.p}>
@@ -209,7 +367,9 @@ export default function KnowYourRightsPage() {
               document what you see in public spaces, as long as you do not interfere.
             </p>
             <ul style={styles.ul}>
-              <li style={styles.li}>Photography and video recording are generally allowed in public places</li>
+              <li style={styles.li}>
+                Photography and video recording are generally allowed in public places
+              </li>
               <li style={styles.li}>You may observe from a reasonable distance</li>
               <li style={styles.li}>Restrictions may apply in secure or restricted areas</li>
             </ul>
@@ -250,10 +410,7 @@ export default function KnowYourRightsPage() {
             </p>
             <p style={{ ...styles.note, marginTop: 10 }}>
               If you want to contact your representatives, use{" "}
-              <a
-                href="https://www.localassembly.org/email-your-congressperson"
-                style={styles.inlineLink}
-              >
+              <a href="https://www.localassembly.org/email-your-congressperson" style={styles.inlineLink}>
                 Email Your Congressperson
               </a>
               .
@@ -285,14 +442,16 @@ export default function KnowYourRightsPage() {
             {faq.map((item) => (
               <div key={item.q} style={{ display: "grid", gap: 6, marginTop: 12 }}>
                 <h3 style={styles.h3}>{item.q}</h3>
-                <p style={styles.p}>{item.a}</p>
+                <p style={styles.p} style={{ whiteSpace: "pre-line", margin: 0, color: "#222" }}>
+                  {item.a}
+                </p>
               </div>
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <div style={{ marginTop: 40, display: "grid", justifyItems: "center" }}>
+        <div className="no-print" style={{ marginTop: 40, display: "grid", justifyItems: "center" }}>
           <Link
             href="/events"
             style={{
