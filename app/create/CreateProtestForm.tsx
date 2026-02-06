@@ -51,7 +51,39 @@ function toggleArrayValue(arr: string[], value: string) {
 
 // Checkbox input styling hardened against global CSS
 const CHECKBOX_CLASS =
-  "mt-1 h-4 w-4 shrink-0 appearance-auto accent-black align-top rounded border border-neutral-300 bg-white";
+  "mt-0.5 h-4 w-4 shrink-0 appearance-auto accent-black align-top rounded border border-neutral-300 bg-white pointer-events-none";
+
+function CheckboxCard({
+  label,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (disabled) return;
+        onToggle();
+      }}
+      className={[
+        "w-full rounded-xl border border-black/10 bg-white p-3 text-left",
+        "flex items-start gap-3",
+        "hover:bg-neutral-50",
+        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+      ].join(" ")}
+      aria-pressed={checked}
+    >
+      <input type="checkbox" className={CHECKBOX_CLASS} checked={checked} readOnly />
+      <span className="text-sm font-medium leading-5 text-neutral-900">{label}</span>
+    </button>
+  );
+}
 
 export default function CreateProtestForm() {
   const router = useRouter();
@@ -222,103 +254,56 @@ export default function CreateProtestForm() {
               type="datetime-local"
               value={form.event_time}
               onChange={(e) => setForm((f) => ({ ...f, event_time: e.target.value }))}
-              className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm md:w-fit"
+              className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm"
             />
           </label>
 
           {/* Event type */}
           <div className="grid gap-2">
             <div className="font-bold">Event type</div>
-
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {EVENT_TYPES.map((t, idx) => {
-                const checked = form.event_types.includes(t);
-                const id = `event-type-${idx}`;
-                return (
-                  <div
-                    key={t}
-                    className="flex items-start gap-3 rounded-xl border border-black/10 bg-white p-3"
-                  >
-                    <input
-                      id={id}
-                      type="checkbox"
-                      className={CHECKBOX_CLASS}
-                      checked={checked}
-                      onChange={() =>
-                        setForm((f) => ({
-                          ...f,
-                          event_types: toggleArrayValue(f.event_types, t),
-                        }))
-                      }
-                    />
-                    <label
-                      htmlFor={id}
-                      className="cursor-pointer select-none text-sm font-medium leading-5 text-neutral-900"
-                    >
-                      {t}
-                    </label>
-                  </div>
-                );
-              })}
+              {EVENT_TYPES.map((t) => (
+                <CheckboxCard
+                  key={t}
+                  label={t}
+                  checked={form.event_types.includes(t)}
+                  onToggle={() =>
+                    setForm((f) => ({
+                      ...f,
+                      event_types: toggleArrayValue(f.event_types, t),
+                    }))
+                  }
+                />
+              ))}
             </div>
           </div>
 
           {/* Accessibility */}
           <div className="grid gap-3 border-t border-black/10 pt-4">
-            <div className="flex items-start gap-3">
-              <input
-                id="is-accessible"
-                type="checkbox"
-                className={CHECKBOX_CLASS}
-                checked={form.is_accessible}
-                onChange={(e) => setForm((f) => ({ ...f, is_accessible: e.target.checked }))}
-              />
-              <label
-                htmlFor="is-accessible"
-                className="cursor-pointer select-none font-bold leading-5 text-neutral-900"
-              >
-                This event is accessible
-              </label>
-            </div>
+            <CheckboxCard
+              label="This event is accessible"
+              checked={form.is_accessible}
+              onToggle={() => setForm((f) => ({ ...f, is_accessible: !f.is_accessible }))}
+            />
 
-            <div
-              className={[
-                "grid gap-2",
-                form.is_accessible ? "" : "opacity-50 pointer-events-none select-none",
-              ].join(" ")}
-            >
+            <div className={["grid gap-2", form.is_accessible ? "" : "opacity-50"].join(" ")}>
               <div className="font-bold">Accessibility features</div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {ACCESS_FEATURES.map((t, idx) => {
-                  const checked = form.accessibility_features.includes(t);
-                  const id = `access-feature-${idx}`;
-                  return (
-                    <div
-                      key={t}
-                      className="flex items-start gap-3 rounded-xl border border-black/10 bg-white p-3"
-                    >
-                      <input
-                        id={id}
-                        type="checkbox"
-                        className={CHECKBOX_CLASS}
-                        checked={checked}
-                        onChange={() =>
-                          setForm((f) => ({
-                            ...f,
-                            accessibility_features: toggleArrayValue(f.accessibility_features, t),
-                          }))
-                        }
-                      />
-                      <label
-                        htmlFor={id}
-                        className="cursor-pointer select-none text-sm font-medium leading-5 text-neutral-900"
-                      >
-                        {t}
-                      </label>
-                    </div>
-                  );
-                })}
+                {ACCESS_FEATURES.map((t) => (
+                  <CheckboxCard
+                    key={t}
+                    label={t}
+                    checked={form.accessibility_features.includes(t)}
+                    disabled={!form.is_accessible}
+                    onToggle={() =>
+                      setForm((f) => ({
+                        ...f,
+                        accessibility_features: toggleArrayValue(f.accessibility_features, t),
+                      }))
+                    }
+                  />
+                ))}
               </div>
 
               {!form.is_accessible ? (
@@ -353,9 +338,7 @@ export default function CreateProtestForm() {
             {busy ? "Creating..." : "Create listing"}
           </button>
 
-          <p className="m-0 text-xs text-neutral-600">
-            If you are not logged in, you will be sent to Login.
-          </p>
+          <p className="m-0 text-xs text-neutral-600">If you are not logged in, you will be sent to Login.</p>
         </div>
       </div>
     </form>
