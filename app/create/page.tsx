@@ -15,10 +15,7 @@ export const metadata: Metadata = {
   description:
     "Create a new civic event listing on Local Assembly. Post a civic gathering so others can find it.",
   alternates: { canonical: "/create" },
-
-  // You do not want this indexed (good choice), but allow crawlers to follow links.
   robots: { index: false, follow: true },
-
   openGraph: {
     type: "website",
     url: `${SITE_URL}/create`,
@@ -28,7 +25,6 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "Create a listing on Local Assembly" }],
   },
-
   twitter: {
     card: "summary_large_image",
     title: "Create a Listing | Local Assembly",
@@ -47,24 +43,30 @@ export default function CreatePage() {
         imageUrl="/images/home-hero.jpg"
       />
 
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: 24 }}>
-        <header style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 16 }}>
-          <div style={{ minWidth: 260, flex: "1 1 320px" }}>
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0 }}>New listing</h1>
-            <p style={{ marginTop: 8, color: "#444", maxWidth: 760 }}>
+      <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-[260px]">
+            <h1 className="m-0 text-[26px] font-black md:text-[28px]">New listing</h1>
+            <p className="mt-2 max-w-[760px] text-sm text-neutral-700 md:text-base">
               Please keep it factual. Avoid threats, doxxing, or calls for violence.
             </p>
           </div>
 
-          <nav style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <Link href="/">Home</Link>
+          <nav className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="inline-block rounded-xl border border-black/20 bg-white px-4 py-2 font-extrabold text-black no-underline"
+            >
+              Home
+            </Link>
+
+            <Link
+              href="/events"
+              className="inline-block rounded-xl border border-black/20 bg-white px-4 py-2 font-extrabold text-black no-underline"
+            >
+              Events
+            </Link>
           </nav>
         </header>
 
-        <div style={{ marginTop: 18 }}>
-          <CreateProtestForm />
-        </div>
-      </main>
-    </>
-  );
-}
+        <section className="mt-5 rounded
