@@ -49,6 +49,10 @@ function toggleArrayValue(arr: string[], value: string) {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
+// ✅ Checkbox classes (hardening against global CSS that can "jumble" alignment)
+const CHECKBOX_CLASS =
+  "mt-1 h-4 w-4 shrink-0 appearance-auto accent-black align-top rounded border border-neutral-300 bg-white";
+
 export default function CreateProtestForm() {
   const router = useRouter();
 
@@ -123,7 +127,9 @@ export default function CreateProtestForm() {
           status: "active",
           event_types: form.event_types.length ? form.event_types : null,
           is_accessible: form.is_accessible,
-          accessibility_features: form.accessibility_features.length ? form.accessibility_features : null,
+          accessibility_features: form.accessibility_features.length
+            ? form.accessibility_features
+            : null,
         })
         .select("id")
         .single();
@@ -187,7 +193,6 @@ export default function CreateProtestForm() {
             />
           </label>
 
-          {/* City/State: stacks on mobile, fixed state width on md+ */}
           <div className="grid gap-4 md:grid-cols-[1fr_120px]">
             <label className="grid gap-2">
               <span className="font-bold">City *</span>
@@ -221,7 +226,6 @@ export default function CreateProtestForm() {
             />
           </label>
 
-          {/* Event type: use grid so labels never jumble on mobile */}
           <div className="grid gap-2">
             <div className="font-bold">Event type</div>
 
@@ -235,7 +239,7 @@ export default function CreateProtestForm() {
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 h-4 w-4 shrink-0"
+                      className={CHECKBOX_CLASS}
                       checked={checked}
                       onChange={() =>
                         setForm((f) => ({
@@ -251,12 +255,11 @@ export default function CreateProtestForm() {
             </div>
           </div>
 
-          {/* Accessibility */}
           <div className="grid gap-3 border-t border-black/10 pt-4">
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                className="mt-1 h-4 w-4 shrink-0"
+                className={CHECKBOX_CLASS}
                 checked={form.is_accessible}
                 onChange={(e) => setForm((f) => ({ ...f, is_accessible: e.target.checked }))}
               />
@@ -281,7 +284,7 @@ export default function CreateProtestForm() {
                     >
                       <input
                         type="checkbox"
-                        className="mt-1 h-4 w-4 shrink-0"
+                        className={CHECKBOX_CLASS}
                         checked={checked}
                         onChange={() =>
                           setForm((f) => ({
@@ -328,9 +331,7 @@ export default function CreateProtestForm() {
             {busy ? "Creating..." : "Create listing"}
           </button>
 
-          <p className="m-0 text-xs text-neutral-600">
-            If you are not logged in, you will be sent to Login.
-          </p>
+          <p className="m-0 text-xs text-neutral-600">If you are not logged in, you will be sent to Login.</p>
         </div>
       </div>
     </form>
