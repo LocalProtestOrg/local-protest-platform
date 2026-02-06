@@ -25,7 +25,8 @@ type ImportedEvent = {
 function stripHtml(s: string) {
   return (s || "")
     .replace(/<[^>]*>/g, " ")
-    .replace(/[[:space:]]+/g, " ")
+    // Use a JS-safe whitespace collapse (avoid regex escapes that can get mangled)
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -44,6 +45,7 @@ function parseMaybeCityState(location: string): { city: string | null; state: st
   const raw = (location || "").trim();
   if (!raw) return { city: null, state: null };
 
+  // Simple heuristic: "City, ST"
   const m = raw.match(/^\s*([^,]+),\s*([A-Za-z]{2})\s*$/);
   if (m) return { city: m[1].trim(), state: m[2].toUpperCase() };
 
@@ -51,9 +53,42 @@ function parseMaybeCityState(location: string): { city: string | null; state: st
 }
 
 async function fetchIcs(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`ICS fetch failed (${res.status}) for ${url}`);
-  return await res.text();
+  let res: Response;
+
+  try {
+    res = await fetch(url, {
+      cache: "no-store",
+      redirect: "follow",
+      headers: {
+        // Some calendar hosts reject requests without a UA and Accept header
+        "User-Agent": "LocalAssemblyImportBot/1.0 (+https://www.localassembly.org)",
+        Accept: "text/calendar,text/plain,*/*",
+      },
+    });
+  } catch (err: any) {
+    // Network-level failure: DNS/TLS/connection refused/etc.
+    throw new Error(`fetch failed (network): ${err?.message || String(err)}`);
+  }
+
+  if (!res.ok) {
+    const ct = res.headers.get("content-type") || "";
+    const bodyPreview = await res.text().catch(() => "");
+    throw new Error(
+      `ICS fetch failed (${res.status}) ct=${ct} url=${url} body=${bodyPreview.slice(0, 200)}`
+    );
+  }
+
+  const text = await res.text();
+
+  // Basic sanity check: ICS files usually contain BEGIN:VCALENDAR
+  if (!text.includes("BEGIN:VCALENDAR")) {
+    const ct = res.headers.get("content-type") || "";
+    throw new Error(
+      `ICS fetch returned non-calendar content ct=${ct} url=${url} preview=${text.slice(0, 200)}`
+    );
+  }
+
+  return text;
 }
 
 function icsToEvents(icsText: string): ImportedEvent[] {
@@ -72,6 +107,7 @@ function icsToEvents(icsText: string): ImportedEvent[] {
     const title = safeTitle(e.summary || "");
     const desc = clampText(e.description || "", 2000) || null;
 
+    // If all-day event, startDate is still usable
     const start = e.startDate ? e.startDate.toJSDate() : null;
     const start_iso = start ? start.toISOString() : null;
 
@@ -141,6 +177,7 @@ export async function GET(req: Request) {
       const icsText = await fetchIcs(src.url);
       const events = icsToEvents(icsText);
 
+      // Safety limit per feed
       const limited = events.slice(0, 200);
 
       for (const ev of limited) {
@@ -162,6 +199,7 @@ export async function GET(req: Request) {
           source_url: ev.source_url,
           last_seen_at: nowIso,
 
+          // Keep these null for imports unless you later map them
           event_types: null,
           is_accessible: null,
           accessibility_features: null,
@@ -182,6 +220,7 @@ export async function GET(req: Request) {
     }
   }
 
+  // Expire imported events we have not seen recently (default 45 days)
   const expireDays = 45;
   const cutoff = new Date(Date.now() - expireDays * 24 * 60 * 60 * 1000).toISOString();
 
