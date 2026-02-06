@@ -25,8 +25,7 @@ type ImportedEvent = {
 function stripHtml(s: string) {
   return (s || "")
     .replace(/<[^>]*>/g, " ")
-    // Use a JS-safe whitespace collapse (avoid regex escapes that can get mangled)
-    .replace(/\s+/g, " ")
+    .replace(/[[:space:]]+/g, " ")
     .trim();
 }
 
@@ -52,43 +51,88 @@ function parseMaybeCityState(location: string): { city: string | null; state: st
   return { city: null, state: null };
 }
 
-async function fetchIcs(url: string) {
-  let res: Response;
+function getSourcesFromEnv(): ImportSource[] {
+  const raw = (process.env.IMPORT_SOURCES_JSON || "[]").trim();
 
+  let parsed: any;
   try {
-    res = await fetch(url, {
-      cache: "no-store",
-      redirect: "follow",
-      headers: {
-        // Some calendar hosts reject requests without a UA and Accept header
-        "User-Agent": "LocalAssemblyImportBot/1.0 (+https://www.localassembly.org)",
-        Accept: "text/calendar,text/plain,*/*",
-      },
-    });
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("IMPORT_SOURCES_JSON is not valid JSON");
+  }
+
+  if (!Array.isArray(parsed)) throw new Error("IMPORT_SOURCES_JSON must be an array");
+
+  return parsed
+    .map((s) => ({
+      key: String(s.key || "").trim(),
+      name: String(s.name || "").trim(),
+      type: "ics" as const,
+      url: String(s.url || "").trim(),
+    }))
+    .filter((s) => s.key && s.name && s.url);
+}
+
+async function fetchWithTimeout(url: string, ms: number, init?: RequestInit) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal, cache: "no-store" });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function fetchIcs(url: string) {
+  const trimmed = (url || "").trim();
+  if (!trimmed) throw new Error("ICS URL is empty");
+  if (!/^https?:\/\//i.test(trimmed)) throw new Error(`ICS URL must start with http(s): ${trimmed}`);
+
+  // Attempt 1: plain fetch
+  try {
+    const res = await fetchWithTimeout(trimmed, 15000);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `ICS fetch failed (http ${res.status}) for ${trimmed}` + (body ? ` | body: ${body.slice(0, 200)}` : "")
+      );
+    }
+    const text = await res.text();
+    if (!text || text.length < 10) throw new Error("ICS response was empty");
+    return text;
   } catch (err: any) {
-    // Network-level failure: DNS/TLS/connection refused/etc.
-    throw new Error(`fetch failed (network): ${err?.message || String(err)}`);
+    const msg1 = err?.name === "AbortError" ? "timeout" : (err?.message || String(err));
+
+    // Attempt 2: browser-ish headers (some sites block serverless user agents)
+    try {
+      const res2 = await fetchWithTimeout(trimmed, 20000, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari",
+          Accept: "text/calendar, text/plain;q=0.9, */*;q=0.8",
+        },
+        redirect: "follow",
+      });
+
+      if (!res2.ok) {
+        const body2 = await res2.text().catch(() => "");
+        throw new Error(
+          `ICS fetch failed (http ${res2.status}) for ${trimmed}` +
+            (body2 ? ` | body: ${body2.slice(0, 200)}` : "")
+        );
+      }
+
+      const text2 = await res2.text();
+      if (!text2 || text2.length < 10) throw new Error("ICS response was empty");
+      return text2;
+    } catch (err2: any) {
+      const msg2 = err2?.name === "AbortError" ? "timeout" : (err2?.message || String(err2));
+
+      // This is the message you are seeing as "fetch failed".
+      // We wrap it so you can distinguish timeout vs DNS/TLS vs blocked host.
+      throw new Error(`fetch failed (network): attempt1=${msg1}; attempt2=${msg2}`);
+    }
   }
-
-  if (!res.ok) {
-    const ct = res.headers.get("content-type") || "";
-    const bodyPreview = await res.text().catch(() => "");
-    throw new Error(
-      `ICS fetch failed (${res.status}) ct=${ct} url=${url} body=${bodyPreview.slice(0, 200)}`
-    );
-  }
-
-  const text = await res.text();
-
-  // Basic sanity check: ICS files usually contain BEGIN:VCALENDAR
-  if (!text.includes("BEGIN:VCALENDAR")) {
-    const ct = res.headers.get("content-type") || "";
-    throw new Error(
-      `ICS fetch returned non-calendar content ct=${ct} url=${url} preview=${text.slice(0, 200)}`
-    );
-  }
-
-  return text;
 }
 
 function icsToEvents(icsText: string): ImportedEvent[] {
@@ -107,7 +151,6 @@ function icsToEvents(icsText: string): ImportedEvent[] {
     const title = safeTitle(e.summary || "");
     const desc = clampText(e.description || "", 2000) || null;
 
-    // If all-day event, startDate is still usable
     const start = e.startDate ? e.startDate.toJSDate() : null;
     const start_iso = start ? start.toISOString() : null;
 
@@ -129,28 +172,6 @@ function icsToEvents(icsText: string): ImportedEvent[] {
   }
 
   return out;
-}
-
-function getSourcesFromEnv(): ImportSource[] {
-  const raw = process.env.IMPORT_SOURCES_JSON || "[]";
-
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("IMPORT_SOURCES_JSON is not valid JSON");
-  }
-
-  if (!Array.isArray(parsed)) throw new Error("IMPORT_SOURCES_JSON must be an array");
-
-  return parsed
-    .map((s) => ({
-      key: String(s.key || "").trim(),
-      name: String(s.name || "").trim(),
-      type: "ics" as const,
-      url: String(s.url || "").trim(),
-    }))
-    .filter((s) => s.key && s.name && s.url);
 }
 
 export async function GET(req: Request) {
@@ -199,7 +220,6 @@ export async function GET(req: Request) {
           source_url: ev.source_url,
           last_seen_at: nowIso,
 
-          // Keep these null for imports unless you later map them
           event_types: null,
           is_accessible: null,
           accessibility_features: null,
@@ -214,13 +234,27 @@ export async function GET(req: Request) {
         totalUpserts += 1;
       }
 
-      results.push({ source: src.key, name: src.name, fetched: limited.length, ok: true });
+      results.push({
+        source: src.key,
+        name: src.name,
+        url: src.url,
+        fetched: limited.length,
+        ok: true,
+      });
     } catch (e: any) {
-      results.push({ source: src.key, name: src.name, ok: false, error: e?.message || String(e) });
+      results.push({
+        source: src.key,
+        name: src.name,
+        url: src.url,
+        ok: false,
+        error: e?.message || String(e),
+        hint:
+          "If this works locally but fails on Vercel, the remote host may block serverless requests or Vercel cannot reach it. Try a different feed URL or mirror the ICS to a host that allows server-to-server fetching.",
+      });
     }
   }
 
-  // Expire imported events we have not seen recently (default 45 days)
+  // Expire imported events not seen recently
   const expireDays = 45;
   const cutoff = new Date(Date.now() - expireDays * 24 * 60 * 60 * 1000).toISOString();
 
