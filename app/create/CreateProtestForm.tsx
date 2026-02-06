@@ -49,39 +49,82 @@ function toggleArrayValue(arr: string[], value: string) {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-// Checkbox input styling hardened against global CSS
-const CHECKBOX_CLASS =
-  "mt-0.5 h-4 w-4 shrink-0 appearance-auto accent-black align-top rounded border border-neutral-300 bg-white pointer-events-none";
-
-function CheckboxCard({
-  label,
+// Strongly isolated tile so global CSS cannot break layout
+function CheckboxTile({
+  text,
   checked,
   disabled,
   onToggle,
 }: {
-  label: string;
+  text: string;
   checked: boolean;
   disabled?: boolean;
   onToggle: () => void;
 }) {
+  const isDisabled = !!disabled;
+
   return (
-    <button
-      type="button"
+    <div
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={isDisabled ? -1 : 0}
       onClick={() => {
-        if (disabled) return;
+        if (isDisabled) return;
         onToggle();
       }}
+      onKeyDown={(e) => {
+        if (isDisabled) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
       className={[
-        "w-full rounded-xl border border-black/10 bg-white p-3 text-left",
-        "flex items-start gap-3",
-        "hover:bg-neutral-50",
-        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+        "w-full rounded-xl border border-black/10 bg-white p-3",
+        isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-neutral-50",
       ].join(" ")}
-      aria-pressed={checked}
+      // Inline styles to override any global CSS on div/span/button
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "flex-start",
+        gap: 12,
+        textAlign: "left",
+      }}
     >
-      <input type="checkbox" className={CHECKBOX_CLASS} checked={checked} readOnly />
-      <span className="text-sm font-medium leading-5 text-neutral-900">{label}</span>
-    </button>
+      <input
+        type="checkbox"
+        checked={checked}
+        readOnly
+        // Inline styles so checkbox cannot be moved by global rules
+        style={{
+          marginTop: 2,
+          width: 16,
+          height: 16,
+          flexShrink: 0,
+        }}
+      />
+      <span
+        // Inline styles to prevent float/absolute positioning bugs
+        style={{
+          position: "static",
+          float: "none",
+          display: "block",
+          lineHeight: "20px",
+          fontSize: 14,
+          fontWeight: 600,
+          color: "#111",
+          margin: 0,
+          padding: 0,
+          width: "auto",
+          maxWidth: "100%",
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+        }}
+      >
+        {text}
+      </span>
+    </div>
   );
 }
 
@@ -263,9 +306,9 @@ export default function CreateProtestForm() {
             <div className="font-bold">Event type</div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {EVENT_TYPES.map((t) => (
-                <CheckboxCard
+                <CheckboxTile
                   key={t}
-                  label={t}
+                  text={t}
                   checked={form.event_types.includes(t)}
                   onToggle={() =>
                     setForm((f) => ({
@@ -280,8 +323,8 @@ export default function CreateProtestForm() {
 
           {/* Accessibility */}
           <div className="grid gap-3 border-t border-black/10 pt-4">
-            <CheckboxCard
-              label="This event is accessible"
+            <CheckboxTile
+              text="This event is accessible"
               checked={form.is_accessible}
               onToggle={() => setForm((f) => ({ ...f, is_accessible: !f.is_accessible }))}
             />
@@ -291,9 +334,9 @@ export default function CreateProtestForm() {
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {ACCESS_FEATURES.map((t) => (
-                  <CheckboxCard
+                  <CheckboxTile
                     key={t}
-                    label={t}
+                    text={t}
                     checked={form.accessibility_features.includes(t)}
                     disabled={!form.is_accessible}
                     onToggle={() =>
@@ -338,7 +381,9 @@ export default function CreateProtestForm() {
             {busy ? "Creating..." : "Create listing"}
           </button>
 
-          <p className="m-0 text-xs text-neutral-600">If you are not logged in, you will be sent to Login.</p>
+          <p className="m-0 text-xs text-neutral-600">
+            If you are not logged in, you will be sent to Login.
+          </p>
         </div>
       </div>
     </form>
