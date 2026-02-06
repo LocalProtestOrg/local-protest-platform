@@ -1,6 +1,117 @@
 import type { Metadata } from "next";
 import { supabase } from "@/lib/supabase";
 import ProtestDetailClient from "./ProtestDetailClient";
+import type { Metadata } from "next";
+import { supabase } from "@/lib/supabase";
+
+const SITE_NAME = "Local Assembly";
+const SITE_URL = "https://www.localassembly.org";
+
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
+
+function stripHtml(s: string) {
+  return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function safeText(s: string, max = 160) {
+  const t = stripHtml(s || "");
+  if (t.length <= max) return t;
+  return t.slice(0, max - 1) + "…";
+}
+
+function fallbackOgImage(id: string) {
+  // If you do not have per-event OG images, use the site hero
+  return `${SITE_URL}/images/home-hero.jpg`;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+
+  const { data } = await supabase
+    .from("protests")
+    .select("id,title,description,city,state,event_time,image_path,status")
+    .eq("id", id)
+    .maybeSingle();
+
+  // If missing or inactive, keep it indexable if you want, or set noindex
+  if (!data || data.status !== "active") {
+    return {
+      metadataBase: new URL(SITE_URL),
+      title: "Event Not Found",
+      description: "This listing is not available.",
+      robots: { index: false, follow: false },
+      alternates: { canonical: `/protest/${id}` },
+    };
+  }
+
+  const titleCore = data.title?.trim() || "Civic Event";
+  const place = [data.city, data.state].filter(Boolean).join(", ");
+  const pageTitle = place ? `${titleCore} in ${place}` : titleCore;
+
+  const desc =
+    (data.description && safeText(data.description, 170)) ||
+    (place
+      ? `View event details for ${titleCore} in ${place}. Find protests, rallies, and civic events near you on Local Assembly.`
+      : `View event details for ${titleCore}. Find protests, rallies, and civic events near you on Local Assembly.`);
+
+  // If your image_path is a Supabase storage path, convert it to an absolute URL that actually resolves.
+  // If you already have a public URL stored, keep it.
+  const ogImage =
+    data.image_path && data.image_path.startsWith("http")
+      ? data.image_path
+      : fallbackOgImage(id);
+
+  const url = `${SITE_URL}/protest/${data.id}`;
+
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: `${pageTitle} | ${SITE_NAME}`,
+    description: desc,
+    keywords: [
+      "local protest near me",
+      "protests near me",
+      "rallies near me",
+      "town hall near me",
+      "civic event",
+      "how can I get involved",
+      "what can I do to help",
+      place,
+      data.city || "",
+      data.state || "",
+      SITE_NAME,
+    ].filter(Boolean),
+    alternates: { canonical: `/protest/${data.id}` },
+    openGraph: {
+      type: "article",
+      url,
+      title: `${pageTitle} | ${SITE_NAME}`,
+      description: desc,
+      siteName: SITE_NAME,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: pageTitle }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${pageTitle} | ${SITE_NAME}`,
+      description: desc,
+      images: [ogImage],
+    },
+    robots: { index: true, follow: true },
+  };
+}
+
+export default async function ProtestDetailPage({ params }: PageProps) {
+  const { id } = await params;
+
+  // your existing page implementation here
+  return (
+    <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
+      <h1 className="text-2xl font-black">Event</h1>
+      <p className="text-sm text-neutral-700">Listing ID: {id}</p>
+    </main>
+  );
+}
 
 export const revalidate = 0;
 

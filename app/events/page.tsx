@@ -4,6 +4,60 @@ import PageHeader from "@/components/PageHeader";
 import ProtestCard from "@/components/ProtestCard";
 import { supabase } from "@/lib/supabase";
 import { unstable_noStore as noStore } from "next/cache";
+import type { Metadata } from "next";
+
+const SITE_NAME = "Local Assembly";
+const SITE_URL = "https://www.localassembly.org";
+const OG_IMAGE = `${SITE_URL}/images/home-hero.jpg`;
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: "Events Near You | Protests, Rallies, Town Halls, and Civic Events",
+  description:
+    "Browse protests, rallies, town halls, voter registration drives, and civic events across the United States. Filter by location, event type, and accessibility.",
+  keywords: [
+    "events near me",
+    "protests near me",
+    "rallies near me",
+    "town hall near me",
+    "local protest near me",
+    "civic events",
+    "voter registration drive",
+    "community organizing",
+    "get involved locally",
+    "what can I do to help",
+    "how can I get involved",
+    "Local Assembly",
+  ],
+  alternates: { canonical: "/events" },
+  openGraph: {
+    type: "website",
+    url: `${SITE_URL}/events`,
+    title: "Events Near You | Local Assembly",
+    description:
+      "Browse community-submitted civic events across the U.S. Neutral platform. No endorsements.",
+    siteName: SITE_NAME,
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "Local Assembly events directory" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Events Near You | Local Assembly",
+    description:
+      "Find protests, rallies, and town halls near you. Browse listings across the U.S.",
+    images: [OG_IMAGE],
+  },
+  robots: { index: true, follow: true },
+};
+
+export default function EventsPage() {
+  return (
+    <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
+      {/* your existing events UI here */}
+      <h1 className="text-2xl font-black">Events</h1>
+    </main>
+  );
+}
+
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
