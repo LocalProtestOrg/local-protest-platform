@@ -49,7 +49,7 @@ function toggleArrayValue(arr: string[], value: string) {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-// ✅ Checkbox classes (hardening against global CSS that can "jumble" alignment)
+// Checkbox input styling hardened against global CSS
 const CHECKBOX_CLASS =
   "mt-1 h-4 w-4 shrink-0 appearance-auto accent-black align-top rounded border border-neutral-300 bg-white";
 
@@ -226,18 +226,21 @@ export default function CreateProtestForm() {
             />
           </label>
 
+          {/* Event type */}
           <div className="grid gap-2">
             <div className="font-bold">Event type</div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {EVENT_TYPES.map((t) => {
+              {EVENT_TYPES.map((t, idx) => {
                 const checked = form.event_types.includes(t);
+                const id = `event-type-${idx}`;
                 return (
-                  <label
+                  <div
                     key={t}
                     className="flex items-start gap-3 rounded-xl border border-black/10 bg-white p-3"
                   >
                     <input
+                      id={id}
                       type="checkbox"
                       className={CHECKBOX_CLASS}
                       checked={checked}
@@ -248,23 +251,35 @@ export default function CreateProtestForm() {
                         }))
                       }
                     />
-                    <span className="text-sm font-medium leading-5 text-neutral-900">{t}</span>
-                  </label>
+                    <label
+                      htmlFor={id}
+                      className="cursor-pointer select-none text-sm font-medium leading-5 text-neutral-900"
+                    >
+                      {t}
+                    </label>
+                  </div>
                 );
               })}
             </div>
           </div>
 
+          {/* Accessibility */}
           <div className="grid gap-3 border-t border-black/10 pt-4">
-            <label className="flex items-start gap-3">
+            <div className="flex items-start gap-3">
               <input
+                id="is-accessible"
                 type="checkbox"
                 className={CHECKBOX_CLASS}
                 checked={form.is_accessible}
                 onChange={(e) => setForm((f) => ({ ...f, is_accessible: e.target.checked }))}
               />
-              <span className="font-bold leading-5">This event is accessible</span>
-            </label>
+              <label
+                htmlFor="is-accessible"
+                className="cursor-pointer select-none font-bold leading-5 text-neutral-900"
+              >
+                This event is accessible
+              </label>
+            </div>
 
             <div
               className={[
@@ -275,14 +290,16 @@ export default function CreateProtestForm() {
               <div className="font-bold">Accessibility features</div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {ACCESS_FEATURES.map((t) => {
+                {ACCESS_FEATURES.map((t, idx) => {
                   const checked = form.accessibility_features.includes(t);
+                  const id = `access-feature-${idx}`;
                   return (
-                    <label
+                    <div
                       key={t}
                       className="flex items-start gap-3 rounded-xl border border-black/10 bg-white p-3"
                     >
                       <input
+                        id={id}
                         type="checkbox"
                         className={CHECKBOX_CLASS}
                         checked={checked}
@@ -293,8 +310,13 @@ export default function CreateProtestForm() {
                           }))
                         }
                       />
-                      <span className="text-sm font-medium leading-5 text-neutral-900">{t}</span>
-                    </label>
+                      <label
+                        htmlFor={id}
+                        className="cursor-pointer select-none text-sm font-medium leading-5 text-neutral-900"
+                      >
+                        {t}
+                      </label>
+                    </div>
                   );
                 })}
               </div>
@@ -331,7 +353,9 @@ export default function CreateProtestForm() {
             {busy ? "Creating..." : "Create listing"}
           </button>
 
-          <p className="m-0 text-xs text-neutral-600">If you are not logged in, you will be sent to Login.</p>
+          <p className="m-0 text-xs text-neutral-600">
+            If you are not logged in, you will be sent to Login.
+          </p>
         </div>
       </div>
     </form>
