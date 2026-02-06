@@ -4,11 +4,38 @@ import PageHeader from "@/components/PageHeader";
 import ProtestCard from "@/components/ProtestCard";
 import { supabase } from "@/lib/supabase";
 import { unstable_noStore as noStore } from "next/cache";
-import type { Metadata } from "next";
+
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 const SITE_NAME = "Local Assembly";
 const SITE_URL = "https://www.localassembly.org";
 const OG_IMAGE = `${SITE_URL}/images/home-hero.jpg`;
+
+const PER_PAGE = 12;
+
+type ProtestRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  city: string | null;
+  state: string | null;
+  event_time: string | null;
+  created_at: string | null;
+  organizer_username: string | null;
+  image_path: string | null;
+  status: string | null;
+
+  event_types: string[] | null;
+  is_accessible: boolean | null;
+  accessibility_features: string[] | null;
+};
+
+type PageProps = {
+  searchParams?: Promise<{
+    page?: string;
+  }>;
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -42,55 +69,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Events Near You | Local Assembly",
-    description:
-      "Find protests, rallies, and town halls near you. Browse listings across the U.S.",
+    description: "Find protests, rallies, and town halls near you. Browse listings across the U.S.",
     images: [OG_IMAGE],
   },
-  robots: { index: true, follow: true },
-};
-
-export default function EventsPage() {
-  return (
-    <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
-      {/* your existing events UI here */}
-      <h1 className="text-2xl font-black">Events</h1>
-    </main>
-  );
-}
-
-
-export const revalidate = 0;
-export const dynamic = "force-dynamic";
-
-const PER_PAGE = 12;
-
-type ProtestRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  city: string | null;
-  state: string | null;
-  event_time: string | null;
-  created_at: string | null;
-  organizer_username: string | null;
-  image_path: string | null;
-  status: string | null;
-
-  event_types: string[] | null;
-  is_accessible: boolean | null;
-  accessibility_features: string[] | null;
-};
-
-type PageProps = {
-  searchParams?: Promise<{
-    page?: string;
-  }>;
-};
-
-export const metadata: Metadata = {
-  title: "Events | Local Assembly",
-  description: "Browse more civic events across the United States.",
-  alternates: { canonical: "https://www.localassembly.org/events" },
   robots: { index: true, follow: true },
 };
 
@@ -125,8 +106,46 @@ export default async function EventsPage({ searchParams }: PageProps) {
   const prevPage = page > 1 ? page - 1 : null;
   const nextPage = page < totalPages ? page + 1 : null;
 
+  const appliedLabel = `Page ${page} of ${totalPages}`;
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        name: "Events Near You",
+        url: `${SITE_URL}/events`,
+        description:
+          "Browse protests, rallies, town halls, voter registration drives, and civic events across the United States.",
+        isPartOf: {
+          "@type": "WebSite",
+          name: SITE_NAME,
+          url: SITE_URL,
+        },
+      },
+      {
+        "@type": "ItemList",
+        name: `Events (${appliedLabel})`,
+        itemListOrder: "https://schema.org/ItemListOrderDescending",
+        numberOfItems: protests.length,
+        itemListElement: protests.slice(0, 25).map((p, idx) => ({
+          "@type": "ListItem",
+          position: idx + 1,
+          url: `${SITE_URL}/protest/${p.id}`,
+          name: p.title,
+          description: p.description ? p.description.slice(0, 160) : undefined,
+        })),
+      },
+    ],
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <PageHeader
         title="Browse Events"
         subtitle="More listings from across the U.S. This platform is neutral and does not endorse any listing."
@@ -136,16 +155,11 @@ export default async function EventsPage({ searchParams }: PageProps) {
       <main className="mx-auto max-w-[980px] px-4 py-6 md:px-6">
         <header>
           <h1 className="m-0 text-[26px] font-black md:text-[28px]">All events</h1>
-          <p className="mt-2 text-sm text-neutral-700 md:text-base">
-            Page {page} of {totalPages}
-          </p>
+          <p className="mt-2 text-sm text-neutral-700 md:text-base">{appliedLabel}</p>
         </header>
 
-        {error ? (
-          <p className="mt-4 text-sm text-red-700">Database error: {error.message}</p>
-        ) : null}
+        {error ? <p className="mt-4 text-sm text-red-700">Database error: {error.message}</p> : null}
 
-        {/* Mobile: 1 column (stacked). Desktop: 3 columns. */}
         <section className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           {protests.length === 0 ? (
             <p className="md:col-span-3">No listings found.</p>
@@ -167,7 +181,6 @@ export default async function EventsPage({ searchParams }: PageProps) {
           )}
         </section>
 
-        {/* Pagination (same behavior as before) */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           {prevPage ? (
             <Link
@@ -190,7 +203,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
 
         <div className="mt-6 grid justify-items-center">
           <a
-            href="https://www.localassembly.org/email-your-congressperson"
+            href={`${SITE_URL}/email-your-congressperson`}
             className="inline-block rounded-xl border border-black/20 bg-red-600 px-5 py-3 text-center font-black text-white no-underline"
             style={{ color: "white" }}
           >
