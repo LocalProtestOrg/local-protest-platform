@@ -52,7 +52,7 @@ export default function CreatePage() {
             </p>
           </div>
 
-          <nav className="flex items-center gap-3">
+          <nav className="flex flex-wrap items-center gap-3">
             <Link
               href="/"
               className="inline-block rounded-xl border border-black/20 bg-white px-4 py-2 font-extrabold text-black no-underline"
@@ -69,4 +69,15 @@ export default function CreatePage() {
           </nav>
         </header>
 
-        <section className="mt-5 rounded
+        <section className="mt-5 rounded-2xl border border-black/10 bg-white p-4 shadow-sm md:p-6">
+          <CreateProtestForm />
+        </section>
+
+        <p className="mt-4 text-xs text-neutral-600">
+          Community note: Please do not include private personal information. Listings that include threats,
+          doxxing, or calls for violence may be removed.
+        </p>
+      </main>
+    </>
+  );
+}
