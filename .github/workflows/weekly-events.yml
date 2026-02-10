@@ -2,12 +2,13 @@ name: Weekly event refresh
 
 on:
   schedule:
-    - cron: "0 10 * * 1"   # Mondays 10:00 UTC (5am ET). Adjust as needed.
+    - cron: "0 10 * * 1" # Mondays 10:00 UTC (5:00 AM America/New_York)
   workflow_dispatch: {}
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
@@ -26,13 +27,12 @@ jobs:
         run: |
           python scripts/pull_mobilize_events.py --limit 200 --days 28 --out events_import.csv
 
-      - name: Upsert into Supabase (optional)
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+      - name: Upsert into Supabase (protests table)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          python scripts/pull_mobilize_events.py --limit 200 --days 28 --out events_import.csv --upsert --supabase-table protests
+          python scripts/pull_mobilize_events.py --limit 200 --days 28 --out events_import.csv --upsert --supabase-table protests --on-conflict source_url,event_time
 
       - name: Upload CSV artifact
         uses: actions/upload-artifact@v4
