@@ -106,12 +106,24 @@ def mobilize_list_events(
     per_page: int,
     include_virtual: bool,
     event_types_filter: List[str],
-    max_pages: int = 50,
+    max_pages: int = 200,
 ) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    page = 1
+    """
+    Mobilize pagination uses a `next` cursor. Do NOT use page=.
+    We keep requesting until `next` is empty or max_pages hit.
 
-    while page <= max_pages:
+    Filters:
+      - timeslot_start/timeslot_end
+      - is_virtual=false
+      - event_types=... (repeatable)
+    """
+    out: List[Dict[str, Any]] = []
+    cursor: Optional[str] = None
+    loops = 0
+
+    while loops < max_pages:
+        loops += 1
+
         params: List[Tuple[str, str]] = []
         params.append(("timeslot_start", f"gte_{start_unix}"))
         params.append(("timeslot_end", f"lt_{end_unix}"))
@@ -123,7 +135,10 @@ def mobilize_list_events(
             params.append(("event_types", et))
 
         params.append(("per_page", str(per_page)))
-        params.append(("page", str(page)))
+
+        # Cursor-based pagination
+        if cursor:
+            params.append(("cursor", cursor))
 
         url = f"{MOBILIZE_API_BASE}/events"
 
@@ -146,17 +161,19 @@ def mobilize_list_events(
 
             payload = resp.json()
             events = payload.get("data") or []
-            if not events:
-                return out
-
             out.extend(events)
+
+            # Mobilize returns a cursor in `next` when more results are available
+            cursor = payload.get("next")
             break
         else:
             raise RuntimeError(f"Mobilize API failed after retries. Last status {last_status}: {last_text}")
 
-        page += 1
+        if not cursor:
+            break
 
     return out
+
 
 
 def extract_from_jsonld(obj: Any) -> List[Dict[str, Any]]:
