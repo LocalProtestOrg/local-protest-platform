@@ -2,18 +2,11 @@
 """
 Local Assembly weekly importer for Supabase `protests` table.
 
-Key goals:
-- Pull ~200 upcoming events (next N days) from Mobilize API
-- Enrich sparse listings by fetching each event's source_url page and extracting:
-  - fuller description
-  - organizer name (if present)
-  - image (if present)
-- Upsert into Supabase with stable keys (source_key + external_id)
-
-Table columns supported (yours):
-id, user_id, organizer_username, title, description, city, state, event_time, created_at, image_path, status,
-report_count, last_reported_at, event_types, is_accessible, accessibility_features, source_type, source_name,
-source_url, source_key, external_id, last_seen_at
+- Pull events from Mobilize within the next N days
+- Enrich sparse listings by fetching each event's source_url page (JSON-LD / OpenGraph)
+- Always writes a CSV
+- Optionally upserts into Supabase
+- IMPORTANT: Fails the run if 0 rows are produced, so it never "succeeds" silently.
 
 Mobilize API docs:
 https://github.com/mobilizeamerica/api
@@ -29,6 +22,7 @@ import json
 import os
 import re
 import sys
+import time
 from typing import Any, Dict, List, Tuple, Optional
 
 import requests
@@ -52,6 +46,7 @@ BANNED_TERMS = [
     "molotov", "kill", "assassinate", "attack", "violent", "violence",
 ]
 
+# EXACT columns written/sent to Supabase (must exist in your table)
 DB_FIELDS_DEFAULT = [
     "title",
     "description",
@@ -71,7 +66,8 @@ DB_FIELDS_DEFAULT = [
     "last_seen_at",
 ]
 
-UA = "LocalAssemblyBot/1.0 (+https://www.localassembly.org)"
+# Use a browser-like UA to avoid bot blocks
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
 
 
 def unix(ts: dt.datetime) -> int:
@@ -91,6 +87,13 @@ def strip_html(s: str) -> str:
     return s.strip()
 
 
+def clean_text(s: str, max_len: int = 4000) -> str:
+    s = (s or "").strip()
+    s = re.sub(r"[ \t\r\f\v]+", " ", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s[:max_len].strip()
+
+
 def looks_safe(title: str, desc: str) -> bool:
     text = f"{title}\n{desc}".lower()
     return not any(term in text for term in BANNED_TERMS)
@@ -103,7 +106,7 @@ def mobilize_list_events(
     per_page: int,
     include_virtual: bool,
     event_types_filter: List[str],
-    max_pages: int = 200,
+    max_pages: int = 50,
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     page = 1
@@ -123,29 +126,40 @@ def mobilize_list_events(
         params.append(("page", str(page)))
 
         url = f"{MOBILIZE_API_BASE}/events"
-        resp = requests.get(url, params=params, timeout=45, headers={"User-Agent": UA})
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Mobilize API error {resp.status_code}: {resp.text[:700]}")
 
-        payload = resp.json()
-        events = payload.get("data") or []
-        if not events:
+        # Retry on 429/5xx
+        last_status = None
+        last_text = ""
+        for attempt in range(1, 6):
+            resp = requests.get(url, params=params, timeout=45, headers={"User-Agent": UA})
+            last_status = resp.status_code
+            last_text = resp.text[:700]
+
+            if resp.status_code == 429 or resp.status_code >= 500:
+                wait = 2 ** attempt
+                print(f"Mobilize returned {resp.status_code}. Retry in {wait}s (attempt {attempt}/5)...", file=sys.stderr)
+                time.sleep(wait)
+                continue
+
+            if resp.status_code >= 400:
+                raise RuntimeError(f"Mobilize API error {resp.status_code}: {last_text}")
+
+            payload = resp.json()
+            events = payload.get("data") or []
+            if not events:
+                return out
+
+            out.extend(events)
             break
+        else:
+            raise RuntimeError(f"Mobilize API failed after retries. Last status {last_status}: {last_text}")
 
-        out.extend(events)
         page += 1
 
     return out
 
 
 def extract_from_jsonld(obj: Any) -> List[Dict[str, Any]]:
-    """
-    Return a list of possible Event-ish objects from JSON-LD.
-    Handles:
-    - single dict
-    - list of dicts
-    - @graph
-    """
     out: List[Dict[str, Any]] = []
 
     def walk(x: Any):
@@ -165,21 +179,7 @@ def extract_from_jsonld(obj: Any) -> List[Dict[str, Any]]:
     return out
 
 
-def clean_text(s: str, max_len: int = 4000) -> str:
-    s = (s or "").strip()
-    s = re.sub(r"[ \t\r\f\v]+", " ", s)
-    s = re.sub(r"\n{3,}", "\n\n", s)
-    return s[:max_len].strip()
-
-
 def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
-    """
-    Fetch event page and try to extract:
-    - description
-    - organizer/source_name
-    - image_url
-    - accessibility hints (best-effort)
-    """
     if not source_url:
         return {"description": None, "source_name": None, "image_url": None, "is_accessible": None, "accessibility_features": None}
 
@@ -196,12 +196,11 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
 
     soup = BeautifulSoup(resp.text, "lxml")
 
-    # 1) JSON-LD Event (best)
+    # JSON-LD Event (best)
     jsonld_events: List[Dict[str, Any]] = []
     for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
         try:
-            raw = tag.string or tag.get_text() or ""
-            raw = raw.strip()
+            raw = (tag.string or tag.get_text() or "").strip()
             if not raw:
                 continue
             obj = json.loads(raw)
@@ -232,28 +231,15 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
         elif isinstance(img, dict):
             image_url = img.get("url")
 
-        # Accessibility (best-effort)
-        is_accessible = None
-        accessibility_features = None
-        # Some pages include "accessibilityFeature" or similar, not guaranteed.
-        af = ev.get("accessibilityFeature")
-        if isinstance(af, list):
-            accessibility_features = ", ".join([str(x) for x in af if x])
-        elif isinstance(af, str):
-            accessibility_features = af
-
-        if accessibility_features:
-            is_accessible = "true"
-
         return {
             "description": desc if desc else None,
             "source_name": organizer if organizer else None,
             "image_url": image_url if image_url else None,
-            "is_accessible": is_accessible,
-            "accessibility_features": accessibility_features,
+            "is_accessible": None,
+            "accessibility_features": None,
         }
 
-    # 2) OpenGraph / meta description (good fallback)
+    # OpenGraph fallback
     og_desc = soup.find("meta", attrs={"property": "og:description"})
     meta_desc = soup.find("meta", attrs={"name": "description"})
     desc = None
@@ -265,7 +251,6 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
     og_img = soup.find("meta", attrs={"property": "og:image"})
     image_url = og_img.get("content") if og_img and og_img.get("content") else None
 
-    # Organizer fallback: sometimes in og:site_name
     og_site = soup.find("meta", attrs={"property": "og:site_name"})
     organizer = og_site.get("content") if og_site and og_site.get("content") else None
 
@@ -283,10 +268,8 @@ def normalize_to_rows(
     *,
     limit: int,
     now_iso: str,
-    source_key: str = "mobilize",
-    default_status: str = "active",
-    enrich: bool = True,
-    enrich_timeout_soft_limit: int = 200,
+    enrich: bool,
+    enrich_max: int,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     seen: set = set()
@@ -327,59 +310,43 @@ def normalize_to_rows(
                 continue
             seen.add(external_id)
 
-            # Start with API description; enrich if too short or empty
             final_desc = clean_text(desc_api) if desc_api else ""
             final_source_name = sponsor_name or "Mobilize"
             image_path = None
-            is_accessible = None
-            accessibility_features = None
 
-            # Only enrich a bounded number per run (keeps workflow fast and polite)
             should_enrich = enrich and browser_url and (len(final_desc) < 180)
-            if should_enrich and enrich_count < enrich_timeout_soft_limit:
+            if should_enrich and enrich_count < enrich_max:
                 enrich_count += 1
                 extra = fetch_and_enrich(browser_url)
-
                 if extra.get("description"):
-                    # Prefer richer description if we got one
                     final_desc = clean_text(extra["description"])
-
                 if extra.get("source_name"):
                     final_source_name = extra["source_name"]
-
                 if extra.get("image_url"):
                     image_path = extra["image_url"]
 
-                if extra.get("is_accessible"):
-                    is_accessible = True
-
-                if extra.get("accessibility_features"):
-                    accessibility_features = extra["accessibility_features"]
-
-            # Final safety check after enrichment
             if not looks_safe(title, final_desc):
                 continue
 
-            row = {
+            rows.append({
                 "title": title,
-                "description": final_desc[:4000] if final_desc else title,
+                "description": (final_desc[:4000] if final_desc else title),
                 "city": city,
                 "state": state,
-                "event_time": iso_utc_from_unix(int(start_u)),  # timestamptz
+                "event_time": iso_utc_from_unix(int(start_u)),
                 "image_path": image_path,
-                "status": default_status,
-                "event_types": ev_type,  # your column is plural
-                "is_accessible": is_accessible,
-                "accessibility_features": accessibility_features,
+                "status": "active",
+                "event_types": ev_type,
+                "is_accessible": None,
+                "accessibility_features": None,
                 "source_type": "api",
                 "source_name": final_source_name,
                 "source_url": browser_url,
-                "source_key": source_key,
+                "source_key": "mobilize",
                 "external_id": external_id,
                 "last_seen_at": now_iso,
-            }
+            })
 
-            rows.append(row)
             if len(rows) >= limit:
                 return rows
 
@@ -418,12 +385,9 @@ def supabase_upsert(
 
     payload = [{k: r.get(k) for k in fieldnames} for r in rows]
 
-    batch_size = 200
-    for i in range(0, len(payload), batch_size):
-        batch = payload[i:i + batch_size]
-        resp = requests.post(endpoint, params=params, headers=headers, data=json.dumps(batch), timeout=120)
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Supabase upsert failed {resp.status_code}: {resp.text[:900]}")
+    resp = requests.post(endpoint, params=params, headers=headers, data=json.dumps(payload), timeout=120)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Supabase upsert failed {resp.status_code}: {resp.text[:900]}")
 
 
 def main() -> int:
@@ -435,8 +399,8 @@ def main() -> int:
     ap.add_argument("--include-virtual", action="store_true")
     ap.add_argument("--event-type", action="append", dest="event_types_filter", default=None)
 
-    ap.add_argument("--enrich", action="store_true", help="Fetch source pages to enrich sparse descriptions")
-    ap.add_argument("--enrich-max", type=int, default=200, help="Max number of source pages to fetch per run")
+    ap.add_argument("--enrich", action="store_true")
+    ap.add_argument("--enrich-max", type=int, default=200)
 
     ap.add_argument("--upsert", action="store_true")
     ap.add_argument("--supabase-table", default="protests")
@@ -452,31 +416,35 @@ def main() -> int:
     event_types_filter = args.event_types_filter or DEFAULT_EVENT_TYPES_FILTER
     db_fields = [x.strip() for x in args.db_fields.split(",") if x.strip()]
 
-    print(f"Fetching Mobilize events (next {args.days} days), aiming for {args.limit} rows...")
+    print(f"Fetching Mobilize events, next {args.days} days ...")
+    events = mobilize_list_events(
+        start_unix=unix(now),
+        end_unix=unix(end),
+        per_page=args.per_page,
+        include_virtual=args.include_virtual,
+        event_types_filter=event_types_filter,
+    )
+    print(f"Fetched {len(events)} raw events from Mobilize.")
 
-    try:
-        events = mobilize_list_events(
-            start_unix=unix(now),
-            end_unix=unix(end),
-            per_page=args.per_page,
-            include_virtual=args.include_virtual,
-            event_types_filter=event_types_filter,
-        )
-    except Exception as e:
-        print(f"ERROR fetching Mobilize events: {e}", file=sys.stderr)
+    if len(events) == 0:
+        # Fail loudly so the action is not "green but empty"
         write_csv(args.out, [], db_fields)
-        print(f"Wrote empty CSV to {args.out}")
-        return 0
+        print("ERROR: Mobilize returned 0 events. Wrote empty CSV and failing.", file=sys.stderr)
+        return 1
 
     rows = normalize_to_rows(
         events,
         limit=args.limit,
         now_iso=now_iso,
-        source_key="mobilize",
-        default_status="active",
         enrich=args.enrich,
-        enrich_timeout_soft_limit=args.enrich_max,
+        enrich_max=args.enrich_max,
     )
+    print(f"Normalized to {len(rows)} rows.")
+
+    if len(rows) == 0:
+        write_csv(args.out, [], db_fields)
+        print("ERROR: Normalized to 0 rows. Wrote empty CSV and failing.", file=sys.stderr)
+        return 1
 
     write_csv(args.out, rows, db_fields)
     print(f"Wrote {len(rows)} rows to {args.out}")
@@ -484,24 +452,18 @@ def main() -> int:
     if args.upsert:
         supabase_url = os.environ.get("SUPABASE_URL", "").strip()
         key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-
         if not supabase_url or not key:
             print("ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.", file=sys.stderr)
             return 1
 
-        try:
-            supabase_upsert(
-                supabase_url=supabase_url,
-                service_role_key=key,
-                table=args.supabase_table,
-                rows=rows,
-                fieldnames=db_fields,
-                on_conflict=args.on_conflict,
-            )
-        except Exception as e:
-            print(f"ERROR upserting to Supabase: {e}", file=sys.stderr)
-            return 1
-
+        supabase_upsert(
+            supabase_url=supabase_url,
+            service_role_key=key,
+            table=args.supabase_table,
+            rows=rows,
+            fieldnames=db_fields,
+            on_conflict=args.on_conflict,
+        )
         print(f"Upserted {len(rows)} rows into Supabase table '{args.supabase_table}'")
 
     return 0
