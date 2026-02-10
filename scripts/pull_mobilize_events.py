@@ -106,47 +106,48 @@ def mobilize_list_events(
     per_page: int,
     include_virtual: bool,
     event_types_filter: List[str],
-    max_pages: int = 200,
+    max_pages: int = 50,
 ) -> List[Dict[str, Any]]:
     """
-    Mobilize pagination uses a `next` cursor. Do NOT use page=.
-    We keep requesting until `next` is empty or max_pages hit.
-
-    Filters:
-      - timeslot_start/timeslot_end
-      - is_virtual=false
-      - event_types=... (repeatable)
+    Mobilize public events pagination:
+    - First request uses /v1/events with filters.
+    - Response may include `next` which is a URL/path to fetch directly.
+    - Do NOT use page= or cursor= (they cause Invalid page/cursor).
     """
     out: List[Dict[str, Any]] = []
-    cursor: Optional[str] = None
-    loops = 0
 
-    while loops < max_pages:
+    # First request URL + params
+    next_url: Optional[str] = f"{MOBILIZE_API_BASE}/events"
+    params: List[Tuple[str, str]] = []
+    params.append(("timeslot_start", f"gte_{start_unix}"))
+    params.append(("timeslot_end", f"lt_{end_unix}"))
+
+    if not include_virtual:
+        params.append(("is_virtual", "false"))
+
+    for et in event_types_filter:
+        params.append(("event_types", et))
+
+    params.append(("per_page", str(per_page)))
+
+    loops = 0
+    while next_url and loops < max_pages:
         loops += 1
 
-        params: List[Tuple[str, str]] = []
-        params.append(("timeslot_start", f"gte_{start_unix}"))
-        params.append(("timeslot_end", f"lt_{end_unix}"))
+        # If next_url is a relative path, make it absolute
+        if next_url.startswith("/"):
+            url = "https://api.mobilize.us" + next_url
+        else:
+            url = next_url
 
-        if not include_virtual:
-            params.append(("is_virtual", "false"))
+        # Only include params on the FIRST request.
+        # Next URLs already include their own querystring.
+        use_params = params if loops == 1 else None
 
-        for et in event_types_filter:
-            params.append(("event_types", et))
-
-        params.append(("per_page", str(per_page)))
-
-        # Cursor-based pagination
-        if cursor:
-            params.append(("cursor", cursor))
-
-        url = f"{MOBILIZE_API_BASE}/events"
-
-        # Retry on 429/5xx
         last_status = None
         last_text = ""
         for attempt in range(1, 6):
-            resp = requests.get(url, params=params, timeout=45, headers={"User-Agent": UA})
+            resp = requests.get(url, params=use_params, timeout=45, headers={"User-Agent": UA})
             last_status = resp.status_code
             last_text = resp.text[:700]
 
@@ -163,16 +164,18 @@ def mobilize_list_events(
             events = payload.get("data") or []
             out.extend(events)
 
-            # Mobilize returns a cursor in `next` when more results are available
-            cursor = payload.get("next")
+            # IMPORTANT: next is a URL/path, not a cursor param
+            next_url = payload.get("next")
             break
         else:
             raise RuntimeError(f"Mobilize API failed after retries. Last status {last_status}: {last_text}")
 
-        if not cursor:
+        # Stop if no more pages
+        if not next_url:
             break
 
     return out
+
 
 
 
