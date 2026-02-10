@@ -33,7 +33,6 @@ BANNED_TERMS = [
     "molotov", "kill", "assassinate", "attack", "violent", "violence",
 ]
 
-# Only columns that exist in your Supabase table
 DB_FIELDS_DEFAULT = [
     "title",
     "description",
@@ -177,7 +176,6 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
 
     soup = BeautifulSoup(resp.text, "lxml")
 
-    # JSON-LD Event
     for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
         raw = (tag.string or tag.get_text() or "").strip()
         if not raw:
@@ -219,7 +217,6 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
             "image_url": image_url if image_url else None,
         }
 
-    # OpenGraph/meta fallback
     def meta(prop: str, attr: str = "property") -> Optional[str]:
         m = soup.find("meta", attrs={attr: prop})
         if m and m.get("content"):
@@ -248,10 +245,6 @@ def iter_mobilize_pages(
     event_types_filter: List[str],
     max_loops: int,
 ):
-    """
-    Generator yielding events page-by-page. This lets us STOP EARLY once we
-    have produced enough rows, instead of fetching thousands of events.
-    """
     params: List[Tuple[str, str]] = [
         ("timeslot_start", f"gte_{start_unix}"),
         ("timeslot_end", f"lt_{end_unix}"),
@@ -284,10 +277,8 @@ def iter_mobilize_pages(
         if not next_url:
             break
 
-        # Politeness delay between pages
         time.sleep(0.8)
 
-        # If we got empty payload due to 429-skip, stop.
         if len(events) == 0 and next_url is None:
             break
 
@@ -305,12 +296,6 @@ def build_rows_streaming(
     enrich_max: int,
     now_iso: str,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """
-    Stream pages -> convert to rows -> STOP when we reach `limit`.
-
-    Returns:
-      rows, total_raw_events_seen
-    """
     rows: List[Dict[str, Any]] = []
     seen_external: set = set()
     enrich_count = 0
@@ -326,7 +311,6 @@ def build_rows_streaming(
     ):
         raw_seen += len(page_events)
 
-        # If rate-limited and we got no events, break quickly.
         if len(page_events) == 0 and raw_seen == 0:
             break
 
@@ -391,9 +375,11 @@ def build_rows_streaming(
                     "image_path": image_path,
                     "status": "active",
                     "event_types": event_types_pg,
-                    # FIX: your DB requires NOT NULL, so always send boolean
+                    # NOT NULL fixes:
                     "is_accessible": False,
-                    "accessibility_features": None,
+                    # accessibility_features is NOT NULL in your DB:
+                    # safest for text[] is an empty array literal
+                    "accessibility_features": "{}",
                     "source_type": "api",
                     "source_name": final_source_name,
                     "source_url": browser_url,
@@ -461,8 +447,6 @@ def main() -> int:
     ap.add_argument("--supabase-table", default="protests")
     ap.add_argument("--on-conflict", default="source_key,external_id")
     ap.add_argument("--db-fields", default=",".join(DB_FIELDS_DEFAULT))
-
-    # Prevent excessive paging even if something goes wrong
     ap.add_argument("--max-loops", type=int, default=20)
 
     args = ap.parse_args()
@@ -492,7 +476,6 @@ def main() -> int:
     print(f"Raw events seen: {raw_seen}")
     print(f"Normalized to {len(rows)} rows.")
 
-    # If we were rate-limited before any data arrived, skip gracefully
     if raw_seen == 0:
         print("No events fetched (likely rate-limited). Skipping upsert and exiting success.", file=sys.stderr)
         return 0
