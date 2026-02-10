@@ -33,6 +33,7 @@ BANNED_TERMS = [
     "molotov", "kill", "assassinate", "attack", "violent", "violence",
 ]
 
+# Only columns that exist in your Supabase table
 DB_FIELDS_DEFAULT = [
     "title",
     "description",
@@ -137,56 +138,6 @@ def _request_json_with_retries(url: str, params: Optional[List[Tuple[str, str]]]
     raise RuntimeError(f"Mobilize API failed after retries. Last status {last_status}: {last_text}")
 
 
-def mobilize_list_events(
-    *,
-    start_unix: int,
-    end_unix: int,
-    per_page: int,
-    include_virtual: bool,
-    event_types_filter: List[str],
-    max_loops: int = 50,
-) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-
-    params: List[Tuple[str, str]] = [
-        ("timeslot_start", f"gte_{start_unix}"),
-        ("timeslot_end", f"lt_{end_unix}"),
-        ("per_page", str(per_page)),
-    ]
-
-    if not include_virtual:
-        params.append(("is_virtual", "false"))
-
-    for et in event_types_filter:
-        params.append(("event_types", et))
-
-    next_url: Optional[str] = f"{MOBILIZE_API_BASE}/events"
-
-    loops = 0
-    while next_url and loops < max_loops:
-        loops += 1
-
-        url = "https://api.mobilize.us" + next_url if next_url.startswith("/") else next_url
-        use_params = params if loops == 1 else None
-
-        payload = _request_json_with_retries(url, use_params)
-        events = payload.get("data") or []
-        out.extend(events)
-
-        next_url = payload.get("next")
-        print(f"Mobilize page {loops}: received {len(events)} events, next={(str(next_url)[:120] if next_url else None)}")
-
-        if not next_url:
-            break
-
-        time.sleep(0.8)
-
-        if len(events) == 0 and next_url is None:
-            break
-
-    return out
-
-
 def extract_jsonld_events(obj: Any) -> List[Dict[str, Any]]:
     found: List[Dict[str, Any]] = []
 
@@ -226,6 +177,7 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
 
     soup = BeautifulSoup(resp.text, "lxml")
 
+    # JSON-LD Event
     for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
         raw = (tag.string or tag.get_text() or "").strip()
         if not raw:
@@ -267,6 +219,7 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
             "image_url": image_url if image_url else None,
         }
 
+    # OpenGraph/meta fallback
     def meta(prop: str, attr: str = "property") -> Optional[str]:
         m = soup.find("meta", attrs={attr: prop})
         if m and m.get("content"):
@@ -286,94 +239,173 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
     }
 
 
-def normalize_to_rows(
-    events: List[Dict[str, Any]],
+def iter_mobilize_pages(
     *,
+    start_unix: int,
+    end_unix: int,
+    per_page: int,
+    include_virtual: bool,
+    event_types_filter: List[str],
+    max_loops: int,
+):
+    """
+    Generator yielding events page-by-page. This lets us STOP EARLY once we
+    have produced enough rows, instead of fetching thousands of events.
+    """
+    params: List[Tuple[str, str]] = [
+        ("timeslot_start", f"gte_{start_unix}"),
+        ("timeslot_end", f"lt_{end_unix}"),
+        ("per_page", str(per_page)),
+    ]
+
+    if not include_virtual:
+        params.append(("is_virtual", "false"))
+
+    for et in event_types_filter:
+        params.append(("event_types", et))
+
+    next_url: Optional[str] = f"{MOBILIZE_API_BASE}/events"
+
+    loops = 0
+    while next_url and loops < max_loops:
+        loops += 1
+
+        url = "https://api.mobilize.us" + next_url if next_url.startswith("/") else next_url
+        use_params = params if loops == 1 else None
+
+        payload = _request_json_with_retries(url, use_params)
+        events = payload.get("data") or []
+        next_url = payload.get("next")
+
+        print(f"Mobilize page {loops}: received {len(events)} events, next={(str(next_url)[:120] if next_url else None)}")
+
+        yield events
+
+        if not next_url:
+            break
+
+        # Politeness delay between pages
+        time.sleep(0.8)
+
+        # If we got empty payload due to 429-skip, stop.
+        if len(events) == 0 and next_url is None:
+            break
+
+
+def build_rows_streaming(
+    *,
+    start_unix: int,
+    end_unix: int,
+    per_page: int,
+    include_virtual: bool,
+    event_types_filter: List[str],
+    max_loops: int,
     limit: int,
-    now_iso: str,
     enrich: bool,
     enrich_max: int,
-) -> List[Dict[str, Any]]:
+    now_iso: str,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """
+    Stream pages -> convert to rows -> STOP when we reach `limit`.
+
+    Returns:
+      rows, total_raw_events_seen
+    """
     rows: List[Dict[str, Any]] = []
-    seen: set = set()
+    seen_external: set = set()
     enrich_count = 0
+    raw_seen = 0
 
-    for ev in events:
-        ev_id = ev.get("id")
-        title = (ev.get("title") or "").strip()
-        desc_api = strip_html(ev.get("description") or "")
+    for page_events in iter_mobilize_pages(
+        start_unix=start_unix,
+        end_unix=end_unix,
+        per_page=per_page,
+        include_virtual=include_virtual,
+        event_types_filter=event_types_filter,
+        max_loops=max_loops,
+    ):
+        raw_seen += len(page_events)
 
-        if not title:
-            continue
+        # If rate-limited and we got no events, break quickly.
+        if len(page_events) == 0 and raw_seen == 0:
+            break
 
-        browser_url = (ev.get("browser_url") or "").strip()
-        ev_type = (ev.get("event_type") or "").strip()
+        for ev in page_events:
+            ev_id = ev.get("id")
+            title = (ev.get("title") or "").strip()
+            desc_api = strip_html(ev.get("description") or "")
 
-        sponsor_name = None
-        sponsor = ev.get("sponsor")
-        if isinstance(sponsor, dict) and sponsor.get("name"):
-            sponsor_name = sponsor["name"]
-
-        loc = ev.get("location") or {}
-        city = (loc.get("locality") or "").strip()
-        state = (loc.get("region") or "").strip()
-
-        timeslots = ev.get("timeslots") or []
-        for ts in timeslots:
-            ts_id = ts.get("id")
-            start_u = ts.get("start_date")
-            if not start_u:
+            if not title:
                 continue
 
-            external_id = f"{ev_id}:{ts_id}:{int(start_u)}"
-            if external_id in seen:
-                continue
-            seen.add(external_id)
+            browser_url = (ev.get("browser_url") or "").strip()
+            ev_type = (ev.get("event_type") or "").strip()
 
-            final_desc = clean_text(desc_api) if desc_api else ""
-            final_source_name = sponsor_name or "Mobilize"
-            image_path = None
+            sponsor_name = None
+            sponsor = ev.get("sponsor")
+            if isinstance(sponsor, dict) and sponsor.get("name"):
+                sponsor_name = sponsor["name"]
 
-            if enrich and browser_url and (len(final_desc) < 180) and (enrich_count < enrich_max):
-                enrich_count += 1
-                extra = fetch_and_enrich(browser_url)
-                if extra.get("description"):
-                    final_desc = clean_text(extra["description"])
-                if extra.get("source_name"):
-                    final_source_name = extra["source_name"]
-                if extra.get("image_url"):
-                    image_path = extra["image_url"]
-                time.sleep(0.25)
+            loc = ev.get("location") or {}
+            city = (loc.get("locality") or "").strip()
+            state = (loc.get("region") or "").strip()
 
-            if not looks_safe(title, final_desc):
-                continue
+            timeslots = ev.get("timeslots") or []
+            for ts in timeslots:
+                ts_id = ts.get("id")
+                start_u = ts.get("start_date")
+                if not start_u:
+                    continue
 
-            event_types_pg = to_pg_text_array_literal([ev_type]) if ev_type else None
+                external_id = f"{ev_id}:{ts_id}:{int(start_u)}"
+                if external_id in seen_external:
+                    continue
+                seen_external.add(external_id)
 
-            rows.append({
-                "title": title,
-                "description": (final_desc[:4000] if final_desc else title),
-                "city": city,
-                "state": state,
-                "event_time": iso_utc_from_unix(int(start_u)),
-                "image_path": image_path,
-                "status": "active",
-                "event_types": event_types_pg,
-                # FIX: your DB requires NOT NULL, so always send a boolean
-                "is_accessible": False,
-                "accessibility_features": None,
-                "source_type": "api",
-                "source_name": final_source_name,
-                "source_url": browser_url,
-                "source_key": "mobilize",
-                "external_id": external_id,
-                "last_seen_at": now_iso,
-            })
+                final_desc = clean_text(desc_api) if desc_api else ""
+                final_source_name = sponsor_name or "Mobilize"
+                image_path = None
 
-            if len(rows) >= limit:
-                return rows
+                if enrich and browser_url and (len(final_desc) < 180) and (enrich_count < enrich_max):
+                    enrich_count += 1
+                    extra = fetch_and_enrich(browser_url)
+                    if extra.get("description"):
+                        final_desc = clean_text(extra["description"])
+                    if extra.get("source_name"):
+                        final_source_name = extra["source_name"]
+                    if extra.get("image_url"):
+                        image_path = extra["image_url"]
+                    time.sleep(0.25)
 
-    return rows
+                if not looks_safe(title, final_desc):
+                    continue
+
+                event_types_pg = to_pg_text_array_literal([ev_type]) if ev_type else None
+
+                rows.append({
+                    "title": title,
+                    "description": (final_desc[:4000] if final_desc else title),
+                    "city": city,
+                    "state": state,
+                    "event_time": iso_utc_from_unix(int(start_u)),
+                    "image_path": image_path,
+                    "status": "active",
+                    "event_types": event_types_pg,
+                    # FIX: your DB requires NOT NULL, so always send boolean
+                    "is_accessible": False,
+                    "accessibility_features": None,
+                    "source_type": "api",
+                    "source_name": final_source_name,
+                    "source_url": browser_url,
+                    "source_key": "mobilize",
+                    "external_id": external_id,
+                    "last_seen_at": now_iso,
+                })
+
+                if len(rows) >= limit:
+                    return rows, raw_seen
+
+    return rows, raw_seen
 
 
 def write_csv(path: str, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
@@ -430,6 +462,9 @@ def main() -> int:
     ap.add_argument("--on-conflict", default="source_key,external_id")
     ap.add_argument("--db-fields", default=",".join(DB_FIELDS_DEFAULT))
 
+    # Prevent excessive paging even if something goes wrong
+    ap.add_argument("--max-loops", type=int, default=20)
+
     args = ap.parse_args()
 
     now = dt.datetime.utcnow()
@@ -441,29 +476,27 @@ def main() -> int:
 
     print(f"Fetching Mobilize events, next {args.days} days ...")
 
-    events = mobilize_list_events(
+    rows, raw_seen = build_rows_streaming(
         start_unix=unix(now),
         end_unix=unix(end),
         per_page=args.per_page,
         include_virtual=args.include_virtual,
         event_types_filter=event_types_filter,
+        max_loops=args.max_loops,
+        limit=args.limit,
+        enrich=args.enrich,
+        enrich_max=args.enrich_max,
+        now_iso=now_iso,
     )
 
-    print(f"Fetched {len(events)} raw events from Mobilize.")
+    print(f"Raw events seen: {raw_seen}")
+    print(f"Normalized to {len(rows)} rows.")
 
-    if len(events) == 0:
+    # If we were rate-limited before any data arrived, skip gracefully
+    if raw_seen == 0:
         print("No events fetched (likely rate-limited). Skipping upsert and exiting success.", file=sys.stderr)
         return 0
 
-    rows = normalize_to_rows(
-        events,
-        limit=args.limit,
-        now_iso=now_iso,
-        enrich=args.enrich,
-        enrich_max=args.enrich_max,
-    )
-
-    print(f"Normalized to {len(rows)} rows.")
     if len(rows) == 0:
         print("No rows produced after normalization. Exiting with error.", file=sys.stderr)
         return 1
