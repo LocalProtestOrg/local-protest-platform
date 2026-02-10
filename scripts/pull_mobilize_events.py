@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-Local Assembly weekly importer for Supabase `protests` table.
-
-Fixes included:
-- Mobilize pagination: follow payload['next'] URL directly
-- Handles GitHub Actions 429 rate limits by skipping run gracefully
-- Writes only columns that exist in your `protests` table
-- IMPORTANT: event_types is written as a Postgres array literal (e.g. "{MEETING}")
-  because your `event_types` column is a Postgres array type (text[])
-
-Your Supabase columns:
-id, user_id, organizer_username, title, description, city, state, event_time, created_at,
-image_path, status, report_count, last_reported_at, event_types, is_accessible,
-accessibility_features, source_type, source_name, source_url, source_key,
-external_id, last_seen_at
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -102,22 +85,13 @@ def looks_safe(title: str, desc: str) -> bool:
 
 
 def to_pg_text_array_literal(values: List[str]) -> Optional[str]:
-    """
-    Convert list of strings into a Postgres text[] array literal.
-    Example: ["MEETING"] -> "{MEETING}"
-             ["MEETING","COMMUNITY"] -> "{MEETING,COMMUNITY}"
-
-    If empty, return None.
-    """
     vals = [v.strip() for v in values if v and v.strip()]
     if not vals:
         return None
 
-    # Escape quotes and backslashes inside items (rare here but safe)
     escaped = []
     for v in vals:
         v = v.replace("\\", "\\\\").replace('"', '\\"')
-        # If item contains special chars, wrap it in double quotes inside array literal
         if any(ch in v for ch in [",", "{", "}", " ", "\t"]):
             escaped.append(f'"{v}"')
         else:
@@ -374,8 +348,6 @@ def normalize_to_rows(
             if not looks_safe(title, final_desc):
                 continue
 
-            # IMPORTANT: event_types column is a Postgres array in your DB.
-            # We store event_type as a one-item array literal.
             event_types_pg = to_pg_text_array_literal([ev_type]) if ev_type else None
 
             rows.append({
@@ -387,7 +359,8 @@ def normalize_to_rows(
                 "image_path": image_path,
                 "status": "active",
                 "event_types": event_types_pg,
-                "is_accessible": None,
+                # FIX: your DB requires NOT NULL, so always send a boolean
+                "is_accessible": False,
                 "accessibility_features": None,
                 "source_type": "api",
                 "source_name": final_source_name,
