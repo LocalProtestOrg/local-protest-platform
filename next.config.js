@@ -12,6 +12,18 @@ const nextConfig = {
       },
     ],
   },
+
+  async redirects() {
+    return [
+      // Non-www -> www
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "localassembly.org" }],
+        destination: "https://www.localassembly.org/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
