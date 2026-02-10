@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Generate CSV (200 events, next 28 days)
+      - name: Generate CSV (200 rows, next 28 days)
         run: |
           python scripts/pull_mobilize_events.py --limit 200 --days 28 --out events_import.csv
 
@@ -32,7 +32,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          python scripts/pull_mobilize_events.py --limit 200 --days 28 --out events_import.csv --upsert --supabase-table protests --on-conflict source_url,event_time
+          python scripts/pull_mobilize_events.py --limit 200 --days 28 --out events_import.csv --upsert --supabase-table protests --on-conflict source_key,external_id
 
       - name: Upload CSV artifact
         uses: actions/upload-artifact@v4
