@@ -2,27 +2,18 @@
 """
 Local Assembly weekly importer for Supabase `protests` table.
 
-Features:
-- Fetch upcoming public events from Mobilize (next N days)
-- Follow Mobilize pagination by requesting the returned `next` URL
-- Enrich sparse listings by fetching each event browser_url page:
-  - JSON-LD Event first
-  - OpenGraph/meta fallback
-- Write a CSV (always if we got rows)
-- Optional upsert to Supabase (PostgREST)
-- Gracefully skip runs if Mobilize returns 429 (rate limited) from GitHub Actions
-  so your automation does not break.
+Fixes included:
+- Mobilize pagination: follow payload['next'] URL directly
+- Handles GitHub Actions 429 rate limits by skipping run gracefully
+- Writes only columns that exist in your `protests` table
+- IMPORTANT: event_types is written as a Postgres array literal (e.g. "{MEETING}")
+  because your `event_types` column is a Postgres array type (text[])
 
-Your Supabase columns supported (subset we write):
-title, description, city, state, event_time, image_path, status, event_types,
-is_accessible, accessibility_features, source_type, source_name, source_url,
-source_key, external_id, last_seen_at
-
-Upsert key:
-source_key + external_id  (requires UNIQUE index on these columns)
-
-Mobilize API docs:
-https://github.com/mobilizeamerica/api
+Your Supabase columns:
+id, user_id, organizer_username, title, description, city, state, event_time, created_at,
+image_path, status, report_count, last_reported_at, event_types, is_accessible,
+accessibility_features, source_type, source_name, source_url, source_key,
+external_id, last_seen_at
 """
 
 from __future__ import annotations
@@ -110,14 +101,32 @@ def looks_safe(title: str, desc: str) -> bool:
     return not any(term in text for term in BANNED_TERMS)
 
 
-def _request_json_with_retries(url: str, params: Optional[List[Tuple[str, str]]]) -> Dict[str, Any]:
+def to_pg_text_array_literal(values: List[str]) -> Optional[str]:
     """
-    Returns parsed JSON for successful responses.
+    Convert list of strings into a Postgres text[] array literal.
+    Example: ["MEETING"] -> "{MEETING}"
+             ["MEETING","COMMUNITY"] -> "{MEETING,COMMUNITY}"
 
-    If rate-limited (429) even after retries:
-    - Return an empty payload {"data": [], "next": None}
-      so the run can skip gracefully (no inserts).
+    If empty, return None.
     """
+    vals = [v.strip() for v in values if v and v.strip()]
+    if not vals:
+        return None
+
+    # Escape quotes and backslashes inside items (rare here but safe)
+    escaped = []
+    for v in vals:
+        v = v.replace("\\", "\\\\").replace('"', '\\"')
+        # If item contains special chars, wrap it in double quotes inside array literal
+        if any(ch in v for ch in [",", "{", "}", " ", "\t"]):
+            escaped.append(f'"{v}"')
+        else:
+            escaped.append(v)
+
+    return "{" + ",".join(escaped) + "}"
+
+
+def _request_json_with_retries(url: str, params: Optional[List[Tuple[str, str]]]) -> Dict[str, Any]:
     last_status = None
     last_text = ""
     for attempt in range(1, 6):
@@ -163,13 +172,6 @@ def mobilize_list_events(
     event_types_filter: List[str],
     max_loops: int = 50,
 ) -> List[Dict[str, Any]]:
-    """
-    Mobilize pagination:
-    - First request uses filters on /v1/events
-    - Response may include `next` (URL or relative path)
-    - Follow `next` directly
-    - Do not use page= or cursor=
-    """
     out: List[Dict[str, Any]] = []
 
     params: List[Tuple[str, str]] = [
@@ -190,11 +192,7 @@ def mobilize_list_events(
     while next_url and loops < max_loops:
         loops += 1
 
-        if next_url.startswith("/"):
-            url = "https://api.mobilize.us" + next_url
-        else:
-            url = next_url
-
+        url = "https://api.mobilize.us" + next_url if next_url.startswith("/") else next_url
         use_params = params if loops == 1 else None
 
         payload = _request_json_with_retries(url, use_params)
@@ -207,10 +205,8 @@ def mobilize_list_events(
         if not next_url:
             break
 
-        # Small politeness delay between pages
         time.sleep(0.8)
 
-        # If we were rate-limited and got empty payload, stop.
         if len(events) == 0 and next_url is None:
             break
 
@@ -223,17 +219,14 @@ def extract_jsonld_events(obj: Any) -> List[Dict[str, Any]]:
     def walk(x: Any):
         if isinstance(x, dict):
             t = x.get("@type")
-            if t == "Event" or t == "SocialEvent":
+            if t in ("Event", "SocialEvent"):
                 found.append(x)
-
             g = x.get("@graph")
             if isinstance(g, list):
                 for it in g:
                     walk(it)
-
             for v in x.values():
                 walk(v)
-
         elif isinstance(x, list):
             for it in x:
                 walk(it)
@@ -259,7 +252,6 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
 
     soup = BeautifulSoup(resp.text, "lxml")
 
-    # JSON-LD Event first
     for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
         raw = (tag.string or tag.get_text() or "").strip()
         if not raw:
@@ -301,7 +293,6 @@ def fetch_and_enrich(source_url: str) -> Dict[str, Optional[str]]:
             "image_url": image_url if image_url else None,
         }
 
-    # OpenGraph/meta fallback
     def meta(prop: str, attr: str = "property") -> Optional[str]:
         m = soup.find("meta", attrs={attr: prop})
         if m and m.get("content"):
@@ -369,23 +360,23 @@ def normalize_to_rows(
             final_source_name = sponsor_name or "Mobilize"
             image_path = None
 
-            should_enrich = enrich and browser_url and (len(final_desc) < 180) and (enrich_count < enrich_max)
-            if should_enrich:
+            if enrich and browser_url and (len(final_desc) < 180) and (enrich_count < enrich_max):
                 enrich_count += 1
                 extra = fetch_and_enrich(browser_url)
-
                 if extra.get("description"):
                     final_desc = clean_text(extra["description"])
                 if extra.get("source_name"):
                     final_source_name = extra["source_name"]
                 if extra.get("image_url"):
                     image_path = extra["image_url"]
-
-                # Polite delay between enrichment fetches
                 time.sleep(0.25)
 
             if not looks_safe(title, final_desc):
                 continue
+
+            # IMPORTANT: event_types column is a Postgres array in your DB.
+            # We store event_type as a one-item array literal.
+            event_types_pg = to_pg_text_array_literal([ev_type]) if ev_type else None
 
             rows.append({
                 "title": title,
@@ -395,7 +386,7 @@ def normalize_to_rows(
                 "event_time": iso_utc_from_unix(int(start_u)),
                 "image_path": image_path,
                 "status": "active",
-                "event_types": ev_type,
+                "event_types": event_types_pg,
                 "is_accessible": None,
                 "accessibility_features": None,
                 "source_type": "api",
@@ -477,21 +468,16 @@ def main() -> int:
 
     print(f"Fetching Mobilize events, next {args.days} days ...")
 
-    try:
-        events = mobilize_list_events(
-            start_unix=unix(now),
-            end_unix=unix(end),
-            per_page=args.per_page,
-            include_virtual=args.include_virtual,
-            event_types_filter=event_types_filter,
-        )
-    except Exception as e:
-        print(f"ERROR: Mobilize fetch failed: {e}", file=sys.stderr)
-        return 1
+    events = mobilize_list_events(
+        start_unix=unix(now),
+        end_unix=unix(end),
+        per_page=args.per_page,
+        include_virtual=args.include_virtual,
+        event_types_filter=event_types_filter,
+    )
 
     print(f"Fetched {len(events)} raw events from Mobilize.")
 
-    # If we were rate-limited, mobilize_list_events returns 0 and warns in logs.
     if len(events) == 0:
         print("No events fetched (likely rate-limited). Skipping upsert and exiting success.", file=sys.stderr)
         return 0
@@ -505,7 +491,6 @@ def main() -> int:
     )
 
     print(f"Normalized to {len(rows)} rows.")
-
     if len(rows) == 0:
         print("No rows produced after normalization. Exiting with error.", file=sys.stderr)
         return 1
@@ -521,19 +506,14 @@ def main() -> int:
             print("ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.", file=sys.stderr)
             return 1
 
-        try:
-            supabase_upsert(
-                supabase_url=supabase_url,
-                service_role_key=key,
-                table=args.supabase_table,
-                rows=rows,
-                fieldnames=db_fields,
-                on_conflict=args.on_conflict,
-            )
-        except Exception as e:
-            print(f"ERROR: Supabase upsert failed: {e}", file=sys.stderr)
-            return 1
-
+        supabase_upsert(
+            supabase_url=supabase_url,
+            service_role_key=key,
+            table=args.supabase_table,
+            rows=rows,
+            fieldnames=db_fields,
+            on_conflict=args.on_conflict,
+        )
         print(f"Upserted {len(rows)} rows into Supabase table '{args.supabase_table}'.")
 
     return 0
